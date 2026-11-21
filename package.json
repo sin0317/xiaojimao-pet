@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "dist": "tsc --noEmit && electron-vite build && electron-builder --mac --win",
     "dist:mac": "tsc --noEmit && electron-vite build && electron-builder --mac",
-    "dist:win": "tsc --noEmit && electron-vite build && electron-builder --win"
+    "dist:win": "tsc --noEmit && electron-vite build && electron-builder --win --dir --config.win.signAndEditExecutable=false",
+    "reicon": "node scripts/set-icon.mjs"
   },
   "build": {
     "appId": "com.xiaojimao.pet",
