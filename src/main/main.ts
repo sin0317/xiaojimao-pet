@@ -422,10 +422,12 @@ function createPetWindow(): void {
   }
   petWindow.once("ready-to-show", () => {
     if (!isPetHiddenByUser()) petWindow?.showInactive();
+    petWindow?.setSkipTaskbar(true);
     updateTrayMenu();
     publishSnapshot();
   });
   petWindow.on("show", () => {
+    petWindow?.setSkipTaskbar(true);
     updateTrayMenu();
     publishSnapshot();
   });
@@ -475,6 +477,7 @@ function createSettingsWindow(): void {
     maxWidth: SETTINGS_WINDOW.width,
     minHeight: 400,
     show: false,
+    skipTaskbar: true,
     backgroundColor: "#faf6ee",
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 14 } }
