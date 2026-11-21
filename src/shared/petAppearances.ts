@@ -289,12 +289,12 @@ export function resolvePetAppearanceId(value: unknown): PetAppearanceId {
   if (value === "lineDog" || value === "lovartPuppy" || value === "xiaoJiMao" || value === "custom") {
     return value;
   }
-  return "lineDog";
+  return "xiaoJiMao";
 }
 
 export function resolveBuiltInPetAppearanceId(value: unknown): BuiltInPetAppearanceId {
   if (value === "lineDog" || value === "lovartPuppy" || value === "xiaoJiMao") return value;
-  return "lineDog";
+  return "xiaoJiMao";
 }
 
 function isPetState(value: string): value is PetState {

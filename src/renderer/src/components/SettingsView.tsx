@@ -527,7 +527,7 @@ export function SettingsView(): JSX.Element {
       customPetAppearance,
       petAppearanceId:
         draft.petAppearanceId === "custom" && !hasRequiredCustomPetAssets(customPetAppearance)
-          ? "lineDog"
+          ? "xiaoJiMao"
           : draft.petAppearanceId
     });
   }
