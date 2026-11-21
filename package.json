@@ -58,6 +58,10 @@
         "from": "pet_assets",
         "to": "pet_assets",
         "filter": ["**/*", "!.DS_Store"]
+      },
+      {
+        "from": "build/icon.png",
+        "to": "app-icon.png"
       }
     ]
   },

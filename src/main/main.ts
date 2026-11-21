@@ -63,7 +63,7 @@ import {
   buildPetContextMenuTemplate,
   buildTrayMenuTemplate
 } from "./menus";
-import { createTrayImage } from "./trayIcon";
+import { createAppIcon, createTrayImage } from "./trayIcon";
 import { getStoredSettings, normalizeSettings } from "./settingsStore";
 import {
   getCurrentStats,
@@ -393,6 +393,7 @@ function createPetWindow(): void {
     show: false,
     skipTaskbar: true,
     hasShadow: false,
+    icon: createAppIcon(),
     backgroundColor: "#00000000",
     alwaysOnTop: true,
     webPreferences: {
@@ -478,6 +479,7 @@ function createSettingsWindow(): void {
     minHeight: 400,
     show: false,
     skipTaskbar: true,
+    icon: createAppIcon(),
     backgroundColor: "#faf6ee",
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 14 } }

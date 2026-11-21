@@ -1,4 +1,16 @@
-import { nativeImage, nativeTheme } from "electron";
+import { app, nativeImage, nativeTheme } from "electron";
+import { join } from "node:path";
+
+function appIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "app-icon.png")
+    : join(app.getAppPath(), "build", "icon.png");
+}
+
+/** 应用图标（窗口 / 设置页共用） */
+export function createAppIcon(): Electron.NativeImage {
+  return nativeImage.createFromPath(appIconPath());
+}
 
 function renderPaw(size: number, color: [number, number, number]): Buffer {
   const buf = Buffer.alloc(size * size * 4, 0);
@@ -29,8 +41,12 @@ function renderPaw(size: number, color: [number, number, number]): Buffer {
 }
 
 export function createTrayImage(): Electron.NativeImage {
-  const size = 22;
+  const icon = nativeImage.createFromPath(appIconPath());
+  if (!icon.isEmpty()) {
+    return icon.resize({ width: 16, height: 16 });
+  }
 
+  const size = 22;
   if (process.platform === "darwin") {
     const image = nativeImage.createFromBuffer(renderPaw(size, [0, 0, 0]), {
       width: size,
