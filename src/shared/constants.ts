@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customPetAppearance: null,
   onboardingDismissed: false,
   launchAtLoginEnabled: false,
+  hideOnFullscreenEnabled: true,
   checkUpdatesOnLaunchEnabled: false,
   breakReminderEnabled: true,
   breakIntervalMinutes: 45,

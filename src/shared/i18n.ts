@@ -150,6 +150,8 @@ export const I18N = {
       system: "系统",
       launchAtLogin: "开机自启",
       launchAtLoginHelp: "正式打包版本会在 macOS 或 Windows 登录后启动；开发环境只保存偏好，不注册系统登录项。",
+      hideOnFullscreen: "全屏时隐藏宠物",
+      hideOnFullscreenHelp: "看视频或玩游戏进入全屏时自动隐藏，退出全屏后恢复；不会影响手动隐藏设置。",
       about: "关于",
       version: "版本",
       releaseNotes: "更新说明",
@@ -459,6 +461,9 @@ export const I18N = {
       launchAtLogin: "Launch at Login",
       launchAtLoginHelp:
         "Packaged macOS and Windows builds will start after login. Development builds only save the preference.",
+      hideOnFullscreen: "Hide Pet in Full Screen",
+      hideOnFullscreenHelp:
+        "Automatically hide for full-screen videos and games, then restore afterward without changing your manual visibility preference.",
       about: "About",
       version: "Version",
       releaseNotes: "Release Notes",

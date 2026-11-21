@@ -28,6 +28,7 @@ export const tests = [
         language: "en",
         petAppearanceId: "lovartPuppy",
         launchAtLoginEnabled: true,
+        hideOnFullscreenEnabled: false,
         checkUpdatesOnLaunchEnabled: true,
         breakRunDurationSeconds: 90
       });
@@ -35,6 +36,7 @@ export const tests = [
       assert.equal(settings.language, "en");
       assert.equal(settings.petAppearanceId, "lovartPuppy");
       assert.equal(settings.launchAtLoginEnabled, true);
+      assert.equal(settings.hideOnFullscreenEnabled, false);
       assert.equal(settings.checkUpdatesOnLaunchEnabled, true);
       assert.equal(settings.breakRunDurationSeconds, 90);
     }

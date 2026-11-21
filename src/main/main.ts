@@ -57,6 +57,7 @@ import {
 } from "./displayPosition";
 import type { DisplayBounds, SavedWindowPosition } from "./displayPosition";
 import { classifyDistraction, isPermissionError, readActiveWindow } from "./distraction";
+import { watchFullscreen } from "./fullscreen";
 import { applyLaunchAtLoginPreference, getLaunchAtLoginState } from "./loginItem";
 import {
   buildApplicationMenuTemplate,
@@ -118,6 +119,8 @@ let focusTimer: NodeJS.Timeout | null = null;
 let distractionTimer: NodeJS.Timeout | null = null;
 let distractionStartupTimer: NodeJS.Timeout | null = null;
 let displayChangeTimer: NodeJS.Timeout | null = null;
+let stopFullscreenWatcher: (() => void) | null = null;
+let petHiddenByFullscreen = false;
 let breakDueAt: number | null = null;
 let hydrationDueAt: number | null = null;
 let focusEndsAt: number | null = null;
@@ -156,6 +159,7 @@ function text(): ReturnType<typeof i18n> {
 }
 
 function setSettings(next: Settings): void {
+  const fullscreenDetectionWasEnabled = getSettings().hideOnFullscreenEnabled;
   const normalized = normalizeSettings(next);
   applyLaunchAtLoginPreference(normalized.launchAtLoginEnabled);
   store.set("settings", normalized);
@@ -163,6 +167,9 @@ function setSettings(next: Settings): void {
   settingsWindow?.setTitle(`${APP_NAME} ${text().menu.settings}`);
   scheduleReminderTimers();
   scheduleDistractionDetection();
+  if (fullscreenDetectionWasEnabled !== normalized.hideOnFullscreenEnabled) {
+    configureFullscreenDetection();
+  }
   updateTrayMenu();
 }
 
@@ -262,6 +269,26 @@ function setPetHiddenByUser(hidden: boolean): void {
   store.set("petHiddenByUser", hidden);
   updateTrayMenu();
   publishSnapshot();
+}
+
+function setPetHiddenByFullscreen(hidden: boolean): void {
+  if (petHiddenByFullscreen === hidden) return;
+  petHiddenByFullscreen = hidden;
+
+  if (petWindow && !petWindow.isDestroyed()) {
+    if (hidden) petWindow.hide();
+    else if (!isPetHiddenByUser()) petWindow.showInactive();
+  }
+  updateTrayMenu();
+  publishSnapshot();
+}
+
+function configureFullscreenDetection(): void {
+  stopFullscreenWatcher?.();
+  stopFullscreenWatcher = null;
+  setPetHiddenByFullscreen(false);
+  if (!getSettings().hideOnFullscreenEnabled) return;
+  stopFullscreenWatcher = watchFullscreen(setPetHiddenByFullscreen);
 }
 
 function sendToPet<T>(channel: string, payload?: T): void {
@@ -422,7 +449,7 @@ function createPetWindow(): void {
     });
   }
   petWindow.once("ready-to-show", () => {
-    if (!isPetHiddenByUser()) petWindow?.showInactive();
+    if (!petHiddenByFullscreen && !isPetHiddenByUser()) petWindow?.showInactive();
     petWindow?.setSkipTaskbar(true);
     updateTrayMenu();
     publishSnapshot();
@@ -446,7 +473,7 @@ function createPetWindow(): void {
 }
 
 function ensurePetWindowVisible(options: { ignoreUserHidden?: boolean } = {}): boolean {
-  if (isPetHiddenByUser() && !options.ignoreUserHidden) {
+  if (petHiddenByFullscreen || (isPetHiddenByUser() && !options.ignoreUserHidden)) {
     updateTrayMenu();
     publishSnapshot();
     return false;
@@ -1347,6 +1374,7 @@ app.whenReady().then(() => {
   registerDisplayChangeHandlers();
   scheduleReminderTimers();
   scheduleDistractionDetection();
+  configureFullscreenDetection();
   if (IS_DEV) {
     createSettingsWindow();
   }
@@ -1360,6 +1388,8 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  stopFullscreenWatcher?.();
+  stopFullscreenWatcher = null;
   for (const timer of [
     breakRunTimer,
     breakRunCountdownTimer,

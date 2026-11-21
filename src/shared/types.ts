@@ -54,6 +54,7 @@ export type Settings = {
   customPetAppearance: CustomPetAppearance | null;
   onboardingDismissed: boolean;
   launchAtLoginEnabled: boolean;
+  hideOnFullscreenEnabled: boolean;
   checkUpdatesOnLaunchEnabled: boolean;
   breakReminderEnabled: boolean;
   breakIntervalMinutes: number;

@@ -973,6 +973,17 @@ export function SettingsView(): JSX.Element {
           }
         />
         <Row
+          label={labels.hideOnFullscreen}
+          hint={labels.hideOnFullscreenHelp}
+          control={
+            <ToggleControl
+              checked={draft.hideOnFullscreenEnabled}
+              onChange={(hideOnFullscreenEnabled) => updateDraft({ hideOnFullscreenEnabled })}
+              ariaLabel={labels.hideOnFullscreen}
+            />
+          }
+        />
+        <Row
           label={labels.updateCheckOnLaunch}
           hint={labels.updateCheckOnLaunchHelp}
           control={
