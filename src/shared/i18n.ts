@@ -293,6 +293,7 @@ export const I18N = {
       workBuddyConnect: "接入",
       workBuddyInstallHint: "未接入，点「接入」写入钩子",
       workBuddyUnsupported: "需装插件",
+      workBuddyDshReadyHint: "Cordis 桥接插件已装；重启 DeepSeek Harness 后生效。",
       workBuddyDshHint: "DeepSeek Harness 没有钩子配置，要装一个桥接插件（见 README「DeepSeek Harness 接入」）",
       diagnosticsHelp:
         "看每个 agent 装没装、这次运行有没有收到事件。显示「已接入」但事件数是 0，通常是还没重启那个 agent。",
@@ -707,6 +708,7 @@ export const I18N = {
       workBuddyConnect: "Connect",
       workBuddyInstallHint: "Not connected — click Connect to install the hooks",
       workBuddyUnsupported: "Needs plugin",
+      workBuddyDshReadyHint: "Cordis bridge plugin installed; restart DeepSeek Harness to take effect.",
       workBuddyDshHint: "DeepSeek Harness has no hook config — install the bridge plugin (see README)",
       diagnosticsHelp:
         "Shows whether each agent is wired up and whether events arrived this run. \"Connected\" with 0 events usually means the agent has not been restarted yet.",

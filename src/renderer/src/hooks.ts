@@ -48,7 +48,8 @@ export function useSnapshot(): AppSnapshot {
     focusActive: false,
     dogVisible: true,
     workBuddy: EMPTY_WORKBUDDY_STATUS,
-    workBuddyIntegrations: []
+    workBuddyIntegrations: [],
+    dshBridge: { installed: false, path: "" }
   });
 
   useEffect(() => {

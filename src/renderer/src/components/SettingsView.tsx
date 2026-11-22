@@ -799,10 +799,11 @@ export function SettingsView(): JSX.Element {
   );
 
   useEffect(() => {
+    // 快照每秒都会重建 settings 对象，正在编辑时绝不能覆盖草稿——否则打一个字就被抹掉
+    if (settingsDirty) return;
     setDraft(settings);
-    setSettingsDirty(false);
     if (settings.petAppearanceId === "custom") setCustomEditorOpen(true);
-  }, [savedSettingsKey, settings]);
+  }, [savedSettingsKey, settingsDirty, settings]);
 
   useEffect(() => {
     if (!settingsDirty) return;
@@ -1292,9 +1293,19 @@ export function SettingsView(): JSX.Element {
             ))}
             <Row
               label="DeepSeek Harness"
-              hint={labels.workBuddyDshHint}
+              hint={
+                snapshot.dshBridge.installed
+                  ? labels.workBuddyDshReadyHint
+                  : labels.workBuddyDshHint
+              }
               control={
-                <span className="pref-static-value">{labels.workBuddyUnsupported}</span>
+                <span
+                  className={`pref-status ${snapshot.dshBridge.installed ? "is-on" : "is-off"}`}
+                >
+                  {snapshot.dshBridge.installed
+                    ? labels.workBuddyInstalled
+                    : labels.workBuddyUnsupported}
+                </span>
               }
             />
             <Row

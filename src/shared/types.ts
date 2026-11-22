@@ -199,6 +199,8 @@ export type AppSnapshot = {
   dogVisible: boolean;
   workBuddy: WorkBuddyStatus;
   workBuddyIntegrations: AgentIntegration[];
+  /** DeepSeek Harness 的桥接插件（Cordis 插件，不是钩子） */
+  dshBridge: { installed: boolean; path: string };
 };
 
 export type AppInfo = {

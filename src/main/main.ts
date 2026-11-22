@@ -1,6 +1,7 @@
 import { basename, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import {
   app,
@@ -609,6 +610,12 @@ async function selectCustomPetAsset(state: PetState): Promise<CustomPetAsset | n
   return importCustomPetAsset(state, result.filePaths[0]);
 }
 
+/** DeepSeek Harness 走的是 Cordis 插件（没有 hooks 配置），装没装看这个目录 */
+function dshBridgeStatus(): { installed: boolean; path: string } {
+  const dir = join(homedir(), ".dsh", "profiles", "desktop", "node_modules", "dsh-xiaojimao-bridge");
+  return { installed: existsSync(join(dir, "index.js")), path: dir };
+}
+
 function snapshot(): AppSnapshot {
   return {
     appInfo: {
@@ -631,7 +638,8 @@ function snapshot(): AppSnapshot {
     dogVisible: Boolean(petWindow?.isVisible()),
     focusActive,
     workBuddy: workBuddyStatus,
-    workBuddyIntegrations
+    workBuddyIntegrations,
+    dshBridge: dshBridgeStatus()
   };
 }
 
