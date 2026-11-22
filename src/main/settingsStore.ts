@@ -1,11 +1,12 @@
 import { DEFAULT_SETTINGS } from "../shared/constants";
+import { CREDIT_AGENTS, defaultCreditAlert } from "../shared/credits";
 import { resolveLanguage } from "../shared/i18n";
 import {
   hasRequiredCustomPetAssets,
   normalizeCustomPetAppearance,
   resolvePetAppearanceId
 } from "../shared/petAppearances";
-import type { Settings } from "../shared/types";
+import type { CreditAlert, Settings } from "../shared/types";
 
 export type SettingsStore = {
   get(key: "settings"): Settings;
@@ -35,8 +36,46 @@ export function normalizeSettings(stored: Partial<Settings> = {}): Settings {
       10
     ),
     workBuddyEnabled: stored.workBuddyEnabled !== false,
-    workBuddyNotifyEnabled: stored.workBuddyNotifyEnabled !== false
+    workBuddyNotifyEnabled: stored.workBuddyNotifyEnabled !== false,
+    creditAlerts: normalizeCreditAlerts(stored.creditAlerts)
   };
+}
+
+/** 三家固定一档，缺的补默认值，多的丢掉；顺带把数字夹到合理范围 */
+export function normalizeCreditAlerts(input: unknown): CreditAlert[] {
+  const stored = Array.isArray(input) ? (input as Partial<CreditAlert>[]) : [];
+
+  return CREDIT_AGENTS.map((agentId) => {
+    const found = stored.find((item) => item?.agentId === agentId);
+    const base = defaultCreditAlert(agentId);
+    if (!found) return base;
+
+    const balance =
+      typeof found.balance === "number" && Number.isFinite(found.balance) && found.balance >= 0
+        ? Math.round(found.balance)
+        : null;
+    const expiresOn =
+      typeof found.expiresOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(found.expiresOn)
+        ? found.expiresOn
+        : null;
+    const resetDay =
+      typeof found.resetDay === "number" && found.resetDay >= 1 && found.resetDay <= 31
+        ? Math.round(found.resetDay)
+        : null;
+    const remindDays =
+      typeof found.remindDays === "number" && Number.isFinite(found.remindDays)
+        ? Math.min(30, Math.max(0, Math.round(found.remindDays)))
+        : base.remindDays;
+
+    return {
+      agentId,
+      balance,
+      expiresOn,
+      resetDay,
+      remindDays,
+      enabled: found.enabled === true
+    };
+  });
 }
 
 export function getStoredSettings(store: SettingsStore): Settings {

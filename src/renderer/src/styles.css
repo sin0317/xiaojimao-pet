@@ -631,6 +631,69 @@ textarea {
   text-transform: uppercase;
 }
 
+.prefs__group-hint {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 4px 0 2px;
+}
+
+/* 积分登记：一行一个 agent，字段横排 */
+.credit-row {
+  border-top: 1px dashed rgba(120, 100, 80, 0.18);
+  padding: 10px 0 4px;
+}
+
+.credit-row:first-of-type {
+  border-top: none;
+}
+
+.credit-row__head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.credit-row__name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.credit-row__status {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.credit-row__status.is-soon {
+  color: #b2543a;
+  font-weight: 600;
+}
+
+.credit-row__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.credit-field {
+  color: var(--ink-soft);
+  display: flex;
+  flex-direction: column;
+  font-size: 11.5px;
+  gap: 4px;
+}
+
+.credit-field .pref-time {
+  width: 118px;
+}
+
+.credit-field .credit-field__num {
+  width: 76px;
+}
+
 .prefs__group > :not(.prefs__group-title) {
   grid-column: 2;
 }

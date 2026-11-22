@@ -1,6 +1,9 @@
 export type Language = "zh-CN" | "en";
 
 import type { AgentIntegration, WorkBuddyStatus } from "./workbuddy";
+import type { CreditAlert } from "./credits";
+
+export type { CreditAlert, CreditAgentId } from "./credits";
 
 export type {
   AgentHookTarget,
@@ -125,6 +128,8 @@ export type Settings = {
   workCheckoutAt: number | null;
   workBuddyEnabled: boolean;
   workBuddyNotifyEnabled: boolean;
+  /** 积分到期提醒：用户自己登记，桌宠只负责到点喊人 */
+  creditAlerts: CreditAlert[];
 };
 
 export type TodayStats = {

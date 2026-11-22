@@ -23,6 +23,7 @@ import {
   DEFAULT_SETTINGS
 } from "../shared/constants";
 import { i18n, pick } from "../shared/i18n";
+import { CREDIT_AGENT_LABELS, creditDaysLeft, creditReminderKey } from "../shared/credits";
 import { PET_STATE_ORDER } from "../shared/petAppearances";
 import { computeWork, dateKeyOf, formatDuration } from "../shared/workClock";
 import {
@@ -45,6 +46,7 @@ import type {
   AppSnapshot,
   AgentDiagnostics,
   BlockingMode,
+  CreditAgentId,
   CustomPetAsset,
   Diagnostics,
   DistractionStatus,
@@ -120,6 +122,8 @@ type StoreSchema = {
   statsHistory: StatsHistory;
   petPosition?: SavedWindowPosition;
   petHiddenByUser?: boolean;
+  /** 积分提醒去重：agentId → 上次提醒的 key（含日期，一天一次） */
+  creditReminders?: Record<string, string>;
 };
 
 type PetPosition = {
@@ -193,6 +197,9 @@ let activeApproval: ApprovalRequest | null = null;
 let approvalTimer: NodeJS.Timeout | null = null;
 let lastPetHeartbeatAt = 0;
 const APPROVAL_POLL_MS = 400;
+/** 积分到期检查间隔 */
+const CREDIT_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+let creditTimer: NodeJS.Timeout | null = null;
 let workBuddyTimer: NodeJS.Timeout | null = null;
 let workBuddyIngesting = false;
 let petRendererReady = false;
@@ -1160,6 +1167,51 @@ async function ingestWorkBuddyEvents(): Promise<void> {
   }
 }
 
+/**
+ * 积分到期提醒：数字是用户自己填的，这里只负责查日期、到点喊一次。
+ * 同一 agent 同一天只喊一次，存在 creditReminders 里，重启也不会重复。
+ */
+function checkCreditAlerts(): void {
+  const alerts = getSettings().creditAlerts ?? [];
+  if (!alerts.length) return;
+
+  const now = new Date();
+  const reminded = { ...(store.get("creditReminders") ?? {}) };
+  const due: Array<{ agentId: CreditAgentId; key: string; days: number; balance: number | null }> = [];
+
+  for (const alert of alerts) {
+    const key = creditReminderKey(alert, now);
+    if (!key || reminded[alert.agentId] === key) continue;
+    due.push({
+      agentId: alert.agentId,
+      key,
+      days: creditDaysLeft(alert, now) ?? 0,
+      balance: alert.balance
+    });
+  }
+  if (!due.length) return;
+
+  due.sort((a, b) => a.days - b.days);
+  const labels = text();
+  const message = due
+    .slice(0, 3)
+    .map((item) => labels.bubble.creditExpiring(CREDIT_AGENT_LABELS[item.agentId], item.days, item.balance))
+    .join("\n");
+
+  showBubble({
+    id: "credit-alert",
+    message,
+    actions: [
+      { id: "credit:dismiss", label: labels.actions.workBuddyDismiss, kind: "primary" }
+    ],
+    autoDismissMs: 25_000
+  });
+  showSystemNotification(message);
+
+  for (const item of due) reminded[item.agentId] = item.key;
+  store.set("creditReminders", reminded);
+}
+
 function scheduleWorkBuddyBridge(): void {
   if (workBuddyTimer) {
     clearInterval(workBuddyTimer);
@@ -1731,6 +1783,10 @@ function handleBubbleAction(actionId: string): void {
     scheduleHydrationReminderTimer(15 * 60 * 1000);
     return;
   }
+  if (actionId === "credit:dismiss") {
+    hideBubble();
+    return;
+  }
   if (actionId === "focus:back") {
     blockingMode = null;
     sendToAll("app:snapshot", snapshot());
@@ -1858,6 +1914,9 @@ app.whenReady().then(() => {
   configureFullscreenDetection();
   scheduleWorkBuddyBridge();
   void refreshWorkBuddyIntegration();
+  // 启动 8 秒后再查积分，避开开机那堆提醒；之后每 30 分钟看一眼
+  setTimeout(() => checkCreditAlerts(), 8000);
+  creditTimer = setInterval(() => checkCreditAlerts(), CREDIT_CHECK_INTERVAL_MS);
   if (IS_DEV) {
     createSettingsWindow();
   }
@@ -1887,7 +1946,8 @@ app.on("before-quit", () => {
     dragTimer,
     dragSafetyTimer,
     workBuddyTimer,
-    approvalTimer
+    approvalTimer,
+    creditTimer
   ]) {
     if (timer) clearTimeout(timer);
   }

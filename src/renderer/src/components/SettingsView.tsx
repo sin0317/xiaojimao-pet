@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, JSX, ReactNode } from "react";
 import { i18n, LANGUAGE_OPTIONS, resolveLanguage } from "../../../shared/i18n";
 import { todayKey } from "../../../shared/constants";
+import { CREDIT_AGENT_LABELS, creditDaysLeft } from "../../../shared/credits";
 import {
   hasRequiredCustomPetAssets,
   PET_STATE_ORDER,
@@ -14,6 +15,7 @@ import type {
   AgentDiagnostics,
   AgentHookTarget,
   BuiltInPetAppearanceId,
+  CreditAlert,
   CustomPetAppearance,
   CustomPetAsset,
   DemoTrigger,
@@ -445,6 +447,94 @@ function customPetStateKind(state: PetState, labels: SettingsCopy): string {
 
 function customPetStateKindClass(state: PetState): string {
   return REQUIRED_CUSTOM_PET_STATES.includes(state) ? " is-required" : "";
+}
+
+function CreditRow({
+  agentLabel,
+  alert,
+  labels,
+  onChange
+}: {
+  agentLabel: string;
+  alert: CreditAlert;
+  labels: SettingsCopy;
+  onChange: (patch: Partial<CreditAlert>) => void;
+}): JSX.Element {
+  const days = creditDaysLeft(alert, new Date());
+  const soon = alert.enabled && days !== null && days >= 0 && days <= 3;
+  const status = !alert.enabled
+    ? labels.creditOff
+    : days === null
+      ? labels.creditNoDate
+      : days < 0
+        ? labels.creditExpired
+        : days === 0
+          ? labels.creditDueToday
+          : labels.creditDaysLeft(days);
+
+  return (
+    <div className="credit-row">
+      <div className="credit-row__head">
+        <span className="credit-row__name">{agentLabel}</span>
+        <span className={`credit-row__status${soon ? " is-soon" : ""}`}>{status}</span>
+        <ToggleControl
+          checked={alert.enabled}
+          onChange={(enabled) => onChange({ enabled })}
+          ariaLabel={agentLabel}
+        />
+      </div>
+      <div className="credit-row__fields">
+        <label className="credit-field">
+          <span>{labels.creditBalance}</span>
+          <input
+            className="pref-time credit-field__num"
+            type="number"
+            min={0}
+            step={10}
+            placeholder="—"
+            value={alert.balance ?? ""}
+            onChange={(event) =>
+              onChange({ balance: event.target.value === "" ? null : Number(event.target.value) })
+            }
+          />
+        </label>
+        <label className="credit-field">
+          <span>{labels.creditExpiresOn}</span>
+          <input
+            className="pref-time"
+            type="date"
+            value={alert.expiresOn ?? ""}
+            onChange={(event) => onChange({ expiresOn: event.target.value || null })}
+          />
+        </label>
+        <label className="credit-field">
+          <span>{labels.creditResetDay}</span>
+          <input
+            className="pref-time credit-field__num"
+            type="number"
+            min={1}
+            max={31}
+            placeholder="—"
+            value={alert.resetDay ?? ""}
+            onChange={(event) =>
+              onChange({ resetDay: event.target.value === "" ? null : Number(event.target.value) })
+            }
+          />
+        </label>
+        <label className="credit-field">
+          <span>{labels.creditRemindDays}</span>
+          <input
+            className="pref-time credit-field__num"
+            type="number"
+            min={0}
+            max={30}
+            value={alert.remindDays}
+            onChange={(event) => onChange({ remindDays: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+    </div>
+  );
 }
 
 function customPetAssetPreviewSrc(asset: CustomPetAsset): string {
@@ -1093,6 +1183,26 @@ export function SettingsView(): JSX.Element {
             {workBuddyError ? <p className="pref-status-note">{workBuddyError}</p> : null}
           </>
         ) : null}
+      </section>
+
+      <section className="prefs__group">
+        <h2 className="prefs__group-title">{labels.credits}</h2>
+        <p className="prefs__group-hint">{labels.creditsHint}</p>
+        {draft.creditAlerts.map((alert) => (
+          <CreditRow
+            key={alert.agentId}
+            agentLabel={CREDIT_AGENT_LABELS[alert.agentId]}
+            alert={alert}
+            labels={labels}
+            onChange={(patch) =>
+              updateDraft({
+                creditAlerts: draft.creditAlerts.map((item) =>
+                  item.agentId === alert.agentId ? { ...item, ...patch } : item
+                )
+              })
+            }
+          />
+        ))}
       </section>
 
       <section className="prefs__group">

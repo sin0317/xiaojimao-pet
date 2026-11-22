@@ -1,3 +1,4 @@
+import { CREDIT_AGENTS, defaultCreditAlert } from "./credits";
 import type { Settings, TodayStats } from "./types";
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -71,7 +72,8 @@ export const DEFAULT_SETTINGS: Settings = {
   workCheckoutDate: null,
   workCheckoutAt: null,
   workBuddyEnabled: true,
-  workBuddyNotifyEnabled: true
+  workBuddyNotifyEnabled: true,
+  creditAlerts: CREDIT_AGENTS.map((agentId) => defaultCreditAlert(agentId))
 };
 
 export function todayKey(date = new Date()): string {

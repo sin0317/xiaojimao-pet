@@ -129,6 +129,11 @@ export const I18N = {
       approvalTitle: (agent: string, tool: string) => `${agent} 想执行 ${tool}`,
       approvalAllowed: "已允许，放行～",
       approvalDenied: "已拒绝，拦下了",
+      creditExpiring: (agent: string, days: number, balance: number | null) => {
+        const when = days <= 0 ? "今天" : `${days} 天后`;
+        const left = balance === null ? "" : `，还剩 ${balance} 积分`;
+        return `${agent} 的积分${when}到期${left}，记得用掉`;
+      },
     },
     actions: {
       breakDone: "我站起来了",
@@ -300,6 +305,18 @@ export const I18N = {
       diagVersion: "版本",
       diagEventDir: "事件目录",
       diagAgents: "任务联动",
+      credits: "积分到期提醒",
+      creditsHint:
+        "三家的积分都记在服务端，本地读不到余额，所以这里要你自己填。填了到期日或每月重置日，到点前桌宠会喊你。",
+      creditBalance: "余额",
+      creditExpiresOn: "到期日",
+      creditResetDay: "每月重置",
+      creditRemindDays: "提前几天",
+      creditOff: "未启用",
+      creditNoDate: "填个日期才会提醒",
+      creditExpired: "已过期",
+      creditDueToday: "今天到期",
+      creditDaysLeft: (n: number) => `还剩 ${n} 天`,
       workBuddyRemove: "移除接入",
       workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
       workBuddyEventDir: "事件目录",
@@ -496,6 +513,11 @@ export const I18N = {
       approvalTitle: (agent: string, tool: string) => `${agent} wants to run ${tool}`,
       approvalAllowed: "Allowed — go ahead",
       approvalDenied: "Denied — blocked",
+      creditExpiring: (agent: string, days: number, balance: number | null) => {
+        const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
+        const left = balance === null ? "" : `, ${balance} credits left`;
+        return `${agent} credits expire ${when}${left} — go spend them`;
+      },
     },
     actions: {
       breakDone: "I stood up",
@@ -672,6 +694,18 @@ export const I18N = {
       diagVersion: "Version",
       diagEventDir: "Event folder",
       diagAgents: "Agent bridge",
+      credits: "Credit expiry",
+      creditsHint:
+        "All three track credits server-side, so the balance can't be read locally — fill it in here. Set an expiry date or a monthly reset day and the pet will remind you.",
+      creditBalance: "Balance",
+      creditExpiresOn: "Expires on",
+      creditResetDay: "Resets on",
+      creditRemindDays: "Remind",
+      creditOff: "Off",
+      creditNoDate: "Add a date to get reminders",
+      creditExpired: "Expired",
+      creditDueToday: "Expires today",
+      creditDaysLeft: (n: number) => `${n} days left`,
       workBuddyRemove: "Disconnect",
       workBuddyRestartHint:
         "Restart WorkBuddy to take effect. The previous config is backed up.",
