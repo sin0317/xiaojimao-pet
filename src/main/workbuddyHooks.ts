@@ -69,6 +69,8 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
   workbuddy: [
     { event: "UserPromptSubmit", matcher: "", timeout: 10 },
     { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
+    // 工具真的跑完了 = 刚才那个「等你选」已经被处理，必须订阅才能及时清掉
+    { event: "PostToolUse", matcher: "", timeout: 10 },
     { event: "Notification", matcher: "", timeout: 10 },
     { event: "Stop", matcher: "", timeout: 10 },
     { event: "FinalStop", matcher: "", timeout: 10 },
@@ -77,6 +79,7 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
   qoder: [
     { event: "UserPromptSubmit", matcher: "", timeout: 10 },
     { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
+    { event: "PostToolUse", matcher: "", timeout: 10 },
     { event: "Notification", matcher: "", timeout: 10 },
     { event: "Stop", matcher: "", timeout: 10 },
     { event: "SessionEnd", matcher: "", timeout: 10 },
@@ -95,6 +98,7 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
   qoderCn: [
     { event: "UserPromptSubmit", matcher: "", timeout: 10 },
     { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
+    { event: "PostToolUse", matcher: "", timeout: 10 },
     { event: "Notification", matcher: "", timeout: 10 },
     { event: "Stop", matcher: "", timeout: 10 },
     { event: "SessionEnd", matcher: "", timeout: 10 }

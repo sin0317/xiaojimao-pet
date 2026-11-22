@@ -2,7 +2,7 @@ import { basename, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile, appendFile } from "node:fs/promises";
 import {
   app,
   BrowserWindow,
@@ -1455,6 +1455,7 @@ async function ingestWorkBuddyEvents(): Promise<void> {
         if (payload && typeof payload === "object" && !Array.isArray(payload)) {
           const hookPayload = payload as WorkBuddyHookPayload;
           events.push({ payload: hookPayload, at: mtimeMs, agent: item.agent });
+          void journalHookEvent(item.agent ?? "?", hookPayload, mtimeMs);
 
           // 诊断页：记录每个 agent 最近一条事件与累计条数
           const label = normalizeAgentName(
@@ -2028,8 +2029,35 @@ function triggerDemo(trigger: DemoTrigger): void {
   if (trigger === "happy") happyFeedback(pick(text().bubble.woof));
 }
 
-/** 已经在桌宠上替用户答了审批：该 agent 的「等你选」应当立刻消失 */
-function clearNeedsInputForAgent(agentLabel: string): void {
+/**
+ * 钩子事件流水：排查「等你选」为什么不消失时用。
+ * 只记关键字段；超过 512KB 就清空重来（覆盖写入，不删文件）。
+ */
+async function journalHookEvent(
+  agent: string,
+  payload: WorkBuddyHookPayload,
+  at: number
+): Promise<void> {
+  const file = join(homedir(), ".xiaojimao", "hook-journal.log");
+  const line = [
+    new Date(at).toISOString(),
+    agent,
+    String(payload.hook_event_name ?? "?"),
+    String(payload.session_id ?? "").slice(0, 8),
+    String(payload.tool_name ?? ""),
+    String(payload.notification_type ?? payload.type ?? "")
+  ].join(" | ");
+
+  try {
+    const info = await stat(file).catch(() => null);
+    if (info && info.size > 512 * 1024) await writeFile(file, "");
+    await appendFile(file, line + "\n");
+  } catch {
+    // 记日志失败不影响主流程
+  }
+}
+
+/** 已经在桌宠上替用户答了审批：该 agent 的「等你选」应当立刻消失 */function clearNeedsInputForAgent(agentLabel: string): void {
   const target = agentLabel.trim().toLowerCase();
   if (!target) return;
 
