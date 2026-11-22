@@ -60,6 +60,7 @@ type EventSpec = {
 export const AGENT_LABELS: Record<AgentHookTarget, string> = {
   workbuddy: "WorkBuddy",
   qoder: "Qoder",
+  qoderCn: "Qoder CN",
   trae: "Trae"
 };
 
@@ -88,6 +89,15 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
     // Trae 的 Notification matcher 匹配 notification_type，空/星号表示全部
     { event: "Notification", matcher: "*", timeout: 10 },
     { event: "Stop", matcher: "", timeout: 10 }
+  ],
+  // Qoder CN 是独立客户端（~/.qoder-cn），事件名与 Qoder 一致。
+  // 先只接状态：那个配置里已经有一份第三方 PermissionRequest 钩子，别去抢。
+  qoderCn: [
+    { event: "UserPromptSubmit", matcher: "", timeout: 10 },
+    { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
+    { event: "Notification", matcher: "", timeout: 10 },
+    { event: "Stop", matcher: "", timeout: 10 },
+    { event: "SessionEnd", matcher: "", timeout: 10 }
   ]
 };
 
@@ -158,13 +168,19 @@ export function agentHookPaths(target: AgentHookTarget, home = homedir()): Agent
     };
   }
 
-  const base = target === "qoder" ? join(home, ".qoder") : join(home, ".trae-cn");
+  const base =
+    target === "qoder"
+      ? join(home, ".qoder")
+      : target === "qoderCn"
+        ? join(home, ".qoder-cn")
+        : join(home, ".trae-cn");
   const scriptPath = join(base, "hooks", AGENT_HOOK_SCRIPT_NAME);
   const approvalScriptPath = join(base, "hooks", AGENT_APPROVAL_SCRIPT_NAME);
   return {
     target,
     label: AGENT_LABELS[target],
-    settingsPath: target === "qoder" ? join(base, "settings.json") : join(base, "hooks.json"),
+    settingsPath:
+      target === "trae" ? join(base, "hooks.json") : join(base, "settings.json"),
     scriptPath,
     approvalScriptPath,
     eventDir,
@@ -603,7 +619,7 @@ export async function detectAgentIntegration(
   return integrationOf(paths, Boolean(config && hasAgentHooks(config, target)), error);
 }
 
-export const SUPPORTED_AGENT_TARGETS: AgentHookTarget[] = ["workbuddy", "qoder", "trae"];
+export const SUPPORTED_AGENT_TARGETS: AgentHookTarget[] = ["workbuddy", "qoder", "qoderCn", "trae"];
 
 export async function detectAllAgents(home = homedir()): Promise<AgentIntegration[]> {
   return Promise.all(SUPPORTED_AGENT_TARGETS.map((target) => detectAgentIntegration(target, home)));

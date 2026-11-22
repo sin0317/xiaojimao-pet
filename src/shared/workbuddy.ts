@@ -56,7 +56,7 @@ export type WorkBuddyStatus = {
   updatedAt: number | null;
 };
 
-export type AgentHookTarget = "workbuddy" | "qoder" | "trae";
+export type AgentHookTarget = "workbuddy" | "qoder" | "qoderCn" | "trae";
 
 export type AgentIntegration = {
   id: AgentHookTarget;

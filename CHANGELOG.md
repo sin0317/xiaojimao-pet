@@ -2,6 +2,16 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.8.8 — 2026-11-22
+
+### 新增
+
+- **支持 Qoder CN 客户端**：它是独立客户端，配置在 `~/.qoder-cn/settings.json`，此前只在 `~/.qoder` 装钩子，
+  所以 CN 从来没被识别到
+  - 「任务」里多一行 Qoder CN，事件落盘到 `workbuddy-events/Qoder CN`
+  - 装钩子时保留配置里已有的第三方钩子（那份 agent-monitor 的 PermissionRequest 不动）
+  - CN 暂不接「权限气泡」：它的 PermissionRequest 已被第三方占用，不去抢
+
 ## 1.8.7 — 2026-11-22
 
 ### 修复

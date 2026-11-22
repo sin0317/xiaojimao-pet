@@ -37,6 +37,7 @@ type SettingsCopy = ReturnType<typeof i18n>["settings"];
 const AGENT_SLOTS: Array<{ id: AgentHookTarget; label: string }> = [
   { id: "workbuddy", label: "WorkBuddy" },
   { id: "qoder", label: "Qoder" },
+  { id: "qoderCn", label: "Qoder CN" },
   { id: "trae", label: "Trae" }
 ];
 
