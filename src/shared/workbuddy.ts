@@ -23,11 +23,16 @@ export type WorkBuddyHookPayload = {
   final_stop_reason?: unknown;
   stop_hook_active?: unknown;
   reason?: unknown;
+  /** 部分宿主会带 client / agent 字段，用来标记来源 */
+  client?: unknown;
+  agent?: unknown;
 };
 
 export type WorkBuddySession = {
   id: string;
   phase: WorkBuddyPhase;
+  /** 事件来源 agent 的展示名，例如 WorkBuddy / Qoder / Trae */
+  agent: string;
   /** 项目目录名，例如 PawPal */
   project: string;
   /** 最近一次任务摘要，用于气泡展示 */
@@ -45,12 +50,18 @@ export type WorkBuddyStatus = {
   updatedAt: number | null;
 };
 
-export type WorkBuddyIntegration = {
+export type AgentHookTarget = "workbuddy" | "qoder" | "trae";
+
+export type AgentIntegration = {
+  id: AgentHookTarget;
+  /** 展示名，例如 WorkBuddy / Qoder / Trae */
+  label: string;
   settingsPath: string;
   scriptPath: string;
   eventDir: string;
   installed: boolean;
-  workBuddyDetected: boolean;
+  /** 本机是否存在该 agent 的配置目录 */
+  detected: boolean;
   error: string | null;
   checkedAt: number;
 };
@@ -70,7 +81,30 @@ export const EMPTY_WORKBUDDY_STATUS: WorkBuddyStatus = {
 
 /** 会把「等你选」透出来的工具名（AskUserQuestion / ExitPlanMode 等） */
 const QUESTION_TOOL_PATTERN =
-  /askuserquestion|ask_followup_question|ask_question|exitplanmode|request_permission|confirm/i;
+  /askuserquestion|ask_followup_question|ask_question|exitplanmode|request_permission|confirm|askfollowup/i;
+
+/** 各 agent 写事件时可能用到的写法 → 桌面展示名 */
+const AGENT_ALIASES: Record<string, string> = {
+  workbuddy: "WorkBuddy",
+  codebuddy: "WorkBuddy",
+  qoder: "Qoder",
+  qodercn: "Qoder CN",
+  "qoder-cn": "Qoder CN",
+  trae: "Trae",
+  "trae-cn": "Trae",
+  "trae cn": "Trae",
+  dsh: "DeepSeek Harness",
+  deepseek: "DeepSeek Harness",
+  "deepseek-harness": "DeepSeek Harness",
+  "deepseek harness": "DeepSeek Harness"
+};
+
+export function normalizeAgentName(raw: unknown): string {
+  const text = asText(raw).trim();
+  if (!text) return "WorkBuddy";
+  const key = text.toLowerCase().replace(/\s+/g, " ");
+  return AGENT_ALIASES[key] ?? text;
+}
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -115,10 +149,12 @@ export function isWorkBuddyPhase(value: unknown): value is WorkBuddyPhase {
   return value === "running" || value === "needsInput" || value === "done";
 }
 
-type WorkBuddyEvent = {
+export type WorkBuddyEvent = {
   payload: WorkBuddyHookPayload;
   /** 事件落盘时间（ms） */
   at: number;
+  /** 事件来自哪个 agent（由落盘目录决定，优先于 payload 里的字段） */
+  agent?: string;
 };
 
 /**
@@ -131,12 +167,15 @@ export function applyWorkBuddyEvents(
   const next: Record<string, WorkBuddySession> = { ...current };
   const ordered = [...events].sort((a, b) => a.at - b.at);
 
-  for (const { payload, at } of ordered) {
+  for (const { payload, at, agent: agentFromDir } of ordered) {
     const id = asText(payload.session_id);
     if (!id) continue;
 
     const name = asText(payload.hook_event_name);
     const project = projectNameFromCwd(payload.cwd);
+    const agent = normalizeAgentName(
+      asText(payload.agent) || asText(payload.client) || agentFromDir
+    );
 
     if (name === "SessionEnd") {
       delete next[id];
@@ -148,17 +187,20 @@ export function applyWorkBuddyEvents(
     const base: WorkBuddySession = next[id] ?? {
       id,
       phase: "running",
+      agent,
       project,
       title: "",
       updatedAt: at,
       needsInputAt: null
     };
     const mergedProject = project || base.project;
+    const mergedAgent = base.agent || agent;
 
     if (name === "UserPromptSubmit") {
       const prompt = summarizeMessage(asText(payload.prompt));
       next[id] = {
         ...base,
+        agent: mergedAgent,
         project: mergedProject,
         phase: "running",
         needsInputAt: null,
@@ -172,6 +214,7 @@ export function applyWorkBuddyEvents(
       // needsInput 是叠加态：底层 phase 保持不动，靠 needsInputAt 浮到最前
       next[id] = {
         ...base,
+        agent: mergedAgent,
         project: mergedProject,
         needsInputAt: at,
         updatedAt: at
@@ -182,6 +225,7 @@ export function applyWorkBuddyEvents(
     if (name === "PreToolUse" && isQuestionTool(payload.tool_name)) {
       next[id] = {
         ...base,
+        agent: mergedAgent,
         project: mergedProject,
         needsInputAt: at,
         updatedAt: at
@@ -197,6 +241,7 @@ export function applyWorkBuddyEvents(
       const summary = summarizeMessage(asText(payload.last_assistant_message));
       next[id] = {
         ...base,
+        agent: mergedAgent,
         project: mergedProject,
         // 刚问过问题就 Stop：用户还没回答，保持「等你选」
         phase: latching ? "needsInput" : "done",

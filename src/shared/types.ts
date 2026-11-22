@@ -1,9 +1,10 @@
 export type Language = "zh-CN" | "en";
 
-import type { WorkBuddyIntegration, WorkBuddyStatus } from "./workbuddy";
+import type { AgentIntegration, WorkBuddyStatus } from "./workbuddy";
 
 export type {
-  WorkBuddyIntegration,
+  AgentHookTarget,
+  AgentIntegration,
   WorkBuddyPhase,
   WorkBuddySession,
   WorkBuddyStatus
@@ -136,7 +137,7 @@ export type AppSnapshot = {
   focusActive: boolean;
   dogVisible: boolean;
   workBuddy: WorkBuddyStatus;
-  workBuddyIntegration: WorkBuddyIntegration;
+  workBuddyIntegrations: AgentIntegration[];
 };
 
 export type AppInfo = {

@@ -11,6 +11,7 @@ import {
   resolvePetAppearanceId
 } from "../../../shared/petAppearances";
 import type {
+  AgentHookTarget,
   BuiltInPetAppearanceId,
   CustomPetAppearance,
   CustomPetAsset,
@@ -24,6 +25,13 @@ import { distractionHelp, formatDistractionState, formatTimer, formatTimestamp, 
 import { useNow, useSnapshot } from "../hooks";
 
 type SettingsCopy = ReturnType<typeof i18n>["settings"];
+
+/** 支持的 agent 顺序固定，首次加载还没拿到快照时用占位状态 */
+const AGENT_SLOTS: Array<{ id: AgentHookTarget; label: string }> = [
+  { id: "workbuddy", label: "WorkBuddy" },
+  { id: "qoder", label: "Qoder" },
+  { id: "trae", label: "Trae" }
+];
 
 function Row({
   label,
@@ -448,13 +456,28 @@ export function SettingsView(): JSX.Element {
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [customEditorOpen, setCustomEditorOpen] = useState(settings.petAppearanceId === "custom");
-  const [workBuddyBusy, setWorkBuddyBusy] = useState(false);
+  const [workBuddyBusy, setWorkBuddyBusy] = useState<AgentHookTarget | null>(null);
   const [workBuddyError, setWorkBuddyError] = useState<string | null>(null);
   const now = useNow();
   const savedSettingsKey = JSON.stringify(settings);
   const language = resolveLanguage(draft.language);
   const labels = i18n(language).settings;
   const customPetReady = hasRequiredCustomPetAssets(draft.customPetAppearance);
+  const integrations = AGENT_SLOTS.map(
+    (slot) =>
+      snapshot.workBuddyIntegrations.find((item) => item.id === slot.id) ?? {
+        id: slot.id,
+        label: slot.label,
+        settingsPath: "",
+        scriptPath: "",
+        eventDir: "",
+        installed: false,
+        detected: false,
+        error: null,
+        checkedAt: 0
+      }
+  );
+  const eventDir = snapshot.workBuddyIntegrations[0]?.eventDir ?? "";
 
   const petAvatar = useMemo(
     () =>
@@ -492,25 +515,25 @@ export function SettingsView(): JSX.Element {
     await window.pawpal.checkForUpdates();
   }
 
-  async function connectWorkBuddy(): Promise<void> {
-    setWorkBuddyBusy(true);
+  async function connectWorkBuddy(target: AgentHookTarget): Promise<void> {
+    setWorkBuddyBusy(target);
     setWorkBuddyError(null);
     try {
-      const result = await window.pawpal.installWorkBuddyHooks();
-      setWorkBuddyError(result.error);
+      const result = await window.pawpal.installWorkBuddyHooks(target);
+      setWorkBuddyError(result?.error ?? null);
     } finally {
-      setWorkBuddyBusy(false);
+      setWorkBuddyBusy(null);
     }
   }
 
-  async function disconnectWorkBuddy(): Promise<void> {
-    setWorkBuddyBusy(true);
+  async function disconnectWorkBuddy(target: AgentHookTarget): Promise<void> {
+    setWorkBuddyBusy(target);
     setWorkBuddyError(null);
     try {
-      const result = await window.pawpal.removeWorkBuddyHooks();
-      setWorkBuddyError(result.error);
+      const result = await window.pawpal.removeWorkBuddyHooks(target);
+      setWorkBuddyError(result?.error ?? null);
     } finally {
-      setWorkBuddyBusy(false);
+      setWorkBuddyBusy(null);
     }
   }
 
@@ -924,40 +947,47 @@ export function SettingsView(): JSX.Element {
                 />
               }
             />
+            {integrations.map((item) => (
+              <Row
+                key={item.id}
+                label={item.label}
+                hint={
+                  item.error ??
+                  (item.installed ? labels.workBuddyRestartHint : labels.workBuddyInstallHint)
+                }
+                control={
+                  <div className="pref-button-group">
+                    <span className={`pref-status ${item.installed ? "is-on" : "is-off"}`}>
+                      {item.installed ? labels.workBuddyInstalled : labels.workBuddyNotInstalled}
+                    </span>
+                    {item.installed ? (
+                      <button
+                        type="button"
+                        className="pref-button"
+                        disabled={workBuddyBusy === item.id}
+                        onClick={() => void disconnectWorkBuddy(item.id)}
+                      >
+                        {labels.workBuddyRemove}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="pref-button is-primary"
+                        disabled={workBuddyBusy === item.id}
+                        onClick={() => void connectWorkBuddy(item.id)}
+                      >
+                        {labels.workBuddyConnect}
+                      </button>
+                    )}
+                  </div>
+                }
+              />
+            ))}
             <Row
-              label={labels.workBuddyIntegration}
-              hint={workBuddyError ?? labels.workBuddyRestartHint}
+              label="DeepSeek Harness"
+              hint={labels.workBuddyDshHint}
               control={
-                <div className="pref-button-group">
-                  <span
-                    className={`pref-status ${
-                      snapshot.workBuddyIntegration.installed ? "is-on" : "is-off"
-                    }`}
-                  >
-                    {snapshot.workBuddyIntegration.installed
-                      ? labels.workBuddyInstalled
-                      : labels.workBuddyNotInstalled}
-                  </span>
-                  {snapshot.workBuddyIntegration.installed ? (
-                    <button
-                      type="button"
-                      className="pref-button"
-                      disabled={workBuddyBusy}
-                      onClick={() => void disconnectWorkBuddy()}
-                    >
-                      {labels.workBuddyRemove}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="pref-button is-primary"
-                      disabled={workBuddyBusy}
-                      onClick={() => void connectWorkBuddy()}
-                    >
-                      {labels.workBuddyInstall}
-                    </button>
-                  )}
-                </div>
+                <span className="pref-static-value">{labels.workBuddyUnsupported}</span>
               }
             />
             <Row
@@ -965,15 +995,15 @@ export function SettingsView(): JSX.Element {
               control={
                 <span className="pref-static-value">
                   {workBuddyPhaseText()}
-                  {snapshot.workBuddy.sessions[0]?.project
-                    ? ` · ${snapshot.workBuddy.sessions[0].project}`
+                  {snapshot.workBuddy.sessions[0]
+                    ? ` · ${snapshot.workBuddy.sessions[0].agent}`
                     : ""}
                 </span>
               }
             />
             <Row
               label={labels.workBuddyEventDir}
-              hint={snapshot.workBuddyIntegration.eventDir || labels.none}
+              hint={eventDir || labels.none}
               control={
                 <div className="pref-button-group">
                   <button

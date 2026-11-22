@@ -70,6 +70,7 @@ function workBadgeView(work: WorkSnapshot, nowMs: number, labels: WorkClockCopy)
 type WorkBuddyBadge = {
   phase: WorkBuddyPhase;
   label: string;
+  agent: string;
   project: string;
   title: string;
   count: number;
@@ -99,6 +100,7 @@ function workBuddyBadgeView(
   return {
     phase: status.phase,
     label,
+    agent: primary?.agent || "WorkBuddy",
     project: primary?.project ?? "",
     title: primary?.title ?? "",
     count
@@ -329,7 +331,7 @@ export function PetView(): JSX.Element {
         <button
           className={`task-badge task-badge--${workBuddy.phase}`}
           onClick={() => window.pawpal.showWorkBuddyStatus()}
-          title={workBuddy.title || workBuddy.label}
+          title={[workBuddy.project, workBuddy.title].filter(Boolean).join(" · ") || workBuddy.label}
           type="button"
         >
           <span className="task-badge__dot" aria-hidden="true" />
@@ -338,9 +340,7 @@ export function PetView(): JSX.Element {
               {workBuddy.label}
               {workBuddy.count > 1 ? <em>×{workBuddy.count}</em> : null}
             </span>
-            {workBuddy.project ? (
-              <span className="task-badge__project">{workBuddy.project}</span>
-            ) : null}
+            <span className="task-badge__project">{workBuddy.agent}</span>
           </span>
         </button>
       ) : null}

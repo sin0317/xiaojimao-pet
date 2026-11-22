@@ -117,14 +117,14 @@ export const I18N = {
         "下班打卡成功，明天见～"
       ],
       workBuddyNeedsInput: [
-        "WorkBuddy 在等你选一下～",
-        "有个任务卡住了，等你点一下",
-        "需要你做决定了，我在这儿等你"
+        (agent: string) => `${agent} 在等你选一下～`,
+        (agent: string) => `${agent} 有个任务卡住了，等你点一下`,
+        (agent: string) => `${agent} 需要你做决定了，我在这儿等你`
       ],
       workBuddyDone: [
-        "任务做完啦！摇尾巴～",
-        "搞定一个，休息一下？",
-        "完成！我帮你记着"
+        (agent: string) => `${agent} 的任务做完啦！摇尾巴～`,
+        (agent: string) => `${agent} 搞定一个，休息一下？`,
+        (agent: string) => `${agent} 完成！我帮你记着`
       ]
     },
     actions: {
@@ -276,6 +276,10 @@ export const I18N = {
       workBuddyInstalled: "已接入",
       workBuddyNotInstalled: "未接入",
       workBuddyInstall: "接入 WorkBuddy",
+      workBuddyConnect: "接入",
+      workBuddyInstallHint: "未接入，点「接入」写入钩子",
+      workBuddyUnsupported: "暂不支持",
+      workBuddyDshHint: "DeepSeek Harness 没有钩子接口，暂时只能靠它的插件体系，后续再补",
       workBuddyRemove: "移除接入",
       workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
       workBuddyEventDir: "事件目录",
@@ -460,14 +464,14 @@ export const I18N = {
         "Checkout done. See you tomorrow~"
       ],
       workBuddyNeedsInput: [
-        "WorkBuddy is waiting on you~",
-        "A task is stuck until you pick something",
-        "You're needed for a decision — I'll wait here"
+        (agent: string) => `${agent} is waiting on you~`,
+        (agent: string) => `${agent} has a task stuck until you pick something`,
+        (agent: string) => `${agent} needs a decision — I'll wait here`
       ],
       workBuddyDone: [
-        "Task finished! *tail wag*",
-        "One down — take a breather?",
-        "Done! I'm keeping track"
+        (agent: string) => `${agent} finished a task! *tail wag*`,
+        (agent: string) => `${agent} closed one out — take a breather?`,
+        (agent: string) => `${agent} is done! I'm keeping track`
       ]
     },
     actions: {
@@ -624,6 +628,10 @@ export const I18N = {
       workBuddyInstalled: "Connected",
       workBuddyNotInstalled: "Not connected",
       workBuddyInstall: "Connect WorkBuddy",
+      workBuddyConnect: "Connect",
+      workBuddyInstallHint: "Not connected — click Connect to install the hooks",
+      workBuddyUnsupported: "Not supported",
+      workBuddyDshHint: "DeepSeek Harness has no hook API; it needs a plugin instead",
       workBuddyRemove: "Disconnect",
       workBuddyRestartHint:
         "Restart WorkBuddy to take effect. The previous config is backed up.",

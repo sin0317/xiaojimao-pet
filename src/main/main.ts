@@ -30,8 +30,10 @@ import {
   summarizeWorkBuddy
 } from "../shared/workbuddy";
 import type {
+  AgentHookTarget,
+  AgentIntegration,
+  WorkBuddyEvent,
   WorkBuddyHookPayload,
-  WorkBuddyIntegration,
   WorkBuddyPhase,
   WorkBuddySession,
   WorkBuddyStatus
@@ -91,10 +93,10 @@ import {
   createInitialUpdateCheck
 } from "./updates";
 import {
-  detectWorkBuddyIntegration,
-  installWorkBuddyHooks,
+  detectAllAgents,
+  installAgentHooks,
   resolveWorkBuddyEventDir,
-  uninstallWorkBuddyHooks
+  uninstallAgentHooks
 } from "./workbuddyHooks";
 
 type StoreSchema = {
@@ -164,18 +166,12 @@ let distractionStatus: DistractionStatus = {
 let updateCheck: UpdateCheckResult = createInitialUpdateCheck();
 let workBuddySessions: Record<string, WorkBuddySession> = {};
 let workBuddyStatus: WorkBuddyStatus = EMPTY_WORKBUDDY_STATUS;
-let workBuddyIntegration: WorkBuddyIntegration = {
-  settingsPath: "",
-  scriptPath: "",
-  eventDir: "",
-  installed: false,
-  workBuddyDetected: false,
-  error: null,
-  checkedAt: 0
-};
+let workBuddyIntegrations: AgentIntegration[] = [];
 let workBuddyTimer: NodeJS.Timeout | null = null;
 let workBuddyIngesting = false;
 let petRendererReady = false;
+/** 渲染进程还没就绪时先把提醒挂起，就绪后补发 */
+let pendingWorkBuddyNotice: WorkBuddyStatus | null = null;
 
 function setPetMouseInteractive(interactive: boolean): void {
   if (!petWindow || petWindow.isDestroyed() || petMouseInteractive === interactive) return;
@@ -293,7 +289,7 @@ function snapshot(): AppSnapshot {
     dogVisible: Boolean(petWindow?.isVisible()),
     focusActive,
     workBuddy: workBuddyStatus,
-    workBuddyIntegration
+    workBuddyIntegrations
   };
 }
 
@@ -490,6 +486,11 @@ function createPetWindow(): void {
     petWindow?.setSkipTaskbar(true);
     updateTrayMenu();
     publishSnapshot();
+    if (pendingWorkBuddyNotice) {
+      const pending = pendingWorkBuddyNotice;
+      pendingWorkBuddyNotice = null;
+      reactToWorkBuddyPhase(pending);
+    }
   });
   petWindow.on("show", () => {
     petWindow?.setSkipTaskbar(true);
@@ -973,29 +974,37 @@ function reactToWorkBuddyPhase(next: WorkBuddyStatus): void {
 
   const labels = text();
   const primary = primaryWorkBuddySession(next);
-  const projectText = primary?.project ? `（${primary.project}）` : "";
+  const agentName = primary?.agent || "WorkBuddy";
 
   if (next.phase === "needsInput") {
     ensurePetWindowVisible();
     if (!focusActive) setPetState("focusAlert");
-    if (!settings.workBuddyNotifyEnabled || !petRendererReady) return;
-    const message = pick(labels.bubble.workBuddyNeedsInput);
+    if (!settings.workBuddyNotifyEnabled) return;
+    if (!petRendererReady) {
+      pendingWorkBuddyNotice = next;
+      return;
+    }
+    const message = pick(labels.bubble.workBuddyNeedsInput)(agentName);
     showBubble({
       id: "workbuddy-needs-input",
-      message: `${message}${projectText}`,
+      message,
       actions: [
         { id: "workbuddy:dismiss", label: labels.actions.workBuddyDismiss, kind: "primary" }
       ],
       autoDismissMs: 20000
     });
-    showSystemNotification(`${message}${projectText}`);
+    showSystemNotification(message);
     return;
   }
 
   if (next.phase === "done") {
     if (!focusActive) setPetState("happy");
-    if (!settings.workBuddyNotifyEnabled || !petRendererReady) return;
-    const message = `${pick(labels.bubble.workBuddyDone)}${projectText}`;
+    if (!settings.workBuddyNotifyEnabled) return;
+    if (!petRendererReady) {
+      pendingWorkBuddyNotice = next;
+      return;
+    }
+    const message = pick(labels.bubble.workBuddyDone)(agentName);
     showBubble({ id: "workbuddy-done", message, autoDismissMs: 3200 });
     showSystemNotification(message);
     setTimeout(() => {
@@ -1030,21 +1039,37 @@ async function ingestWorkBuddyEvents(): Promise<void> {
 
   try {
     const eventDir = resolveWorkBuddyEventDir();
-    let names: string[] = [];
+    const now = Date.now();
+    const events: WorkBuddyEvent[] = [];
+    const pending: Array<{ path: string; agent?: string }> = [];
+
     try {
-      names = (await readdir(eventDir)).filter((name) => name.endsWith(".json"));
+      // 根目录是 WorkBuddy 的老位置，子目录是各 agent 的事件（名字即 agent）
+      for (const entry of await readdir(eventDir, { withFileTypes: true })) {
+        const fullPath = join(eventDir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name.startsWith(".")) continue;
+          let files: string[] = [];
+          try {
+            files = await readdir(fullPath);
+          } catch {
+            continue;
+          }
+          for (const name of files) {
+            if (name.endsWith(".json")) pending.push({ path: join(fullPath, name), agent: entry.name });
+          }
+        } else if (entry.name.endsWith(".json")) {
+          pending.push({ path: fullPath });
+        }
+      }
     } catch {
-      names = [];
+      // 目录还没建好
     }
 
-    const now = Date.now();
-    const events: Array<{ payload: WorkBuddyHookPayload; at: number }> = [];
-
-    for (const name of names.slice(0, 400)) {
-      const filePath = join(eventDir, name);
+    for (const item of pending.slice(0, 400)) {
       let mtimeMs = 0;
       try {
-        mtimeMs = (await stat(filePath)).mtimeMs;
+        mtimeMs = (await stat(item.path)).mtimeMs;
       } catch {
         continue;
       }
@@ -1052,15 +1077,19 @@ async function ingestWorkBuddyEvents(): Promise<void> {
       if (now - mtimeMs < 150) continue;
 
       try {
-        const raw = await readFile(filePath, "utf8");
+        const raw = await readFile(item.path, "utf8");
         const payload = JSON.parse(raw) as unknown;
         if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-          events.push({ payload: payload as WorkBuddyHookPayload, at: mtimeMs });
+          events.push({
+            payload: payload as WorkBuddyHookPayload,
+            at: mtimeMs,
+            agent: item.agent
+          });
         }
       } catch {
         // 坏文件直接清掉，避免反复重试
       }
-      await unlink(filePath).catch(() => undefined);
+      await unlink(item.path).catch(() => undefined);
     }
 
     if (events.length) {
@@ -1091,7 +1120,7 @@ function scheduleWorkBuddyBridge(): void {
 }
 
 async function refreshWorkBuddyIntegration(): Promise<void> {
-  workBuddyIntegration = await detectWorkBuddyIntegration();
+  workBuddyIntegrations = await detectAllAgents();
   publishSnapshot();
 }
 
@@ -1109,9 +1138,9 @@ function showWorkBuddyDetails(): void {
   }
 
   const lines = workBuddyStatus.sessions.slice(0, 3).map((session) => {
-    const name = session.project || "WorkBuddy";
-    const title = session.title ? ` · ${session.title}` : "";
-    return `· ${name}｜${workBuddyPhaseLabel(session.phase)}${title}`;
+    const project = session.project ? ` · ${session.project}` : "";
+    const title = session.title ? `：${session.title}` : "";
+    return `· ${session.agent}｜${workBuddyPhaseLabel(session.phase)}${project}${title}`;
   });
 
   showBubble({ id: "workbuddy-details", message: lines.join("\n"), autoDismissMs: 15000 });
@@ -1534,15 +1563,15 @@ function registerIpc(): void {
   ipcMain.on("focus:start", startFocusMode);
   ipcMain.on("focus:stop", () => stopFocusMode(false));
   ipcMain.on("stats:reset-today", resetTodayStats);
-  ipcMain.handle("workbuddy:install-hooks", async () => {
-    workBuddyIntegration = await installWorkBuddyHooks();
-    publishSnapshot();
-    return workBuddyIntegration;
-  });
-  ipcMain.handle("workbuddy:remove-hooks", async () => {
-    await uninstallWorkBuddyHooks();
+  ipcMain.handle("workbuddy:install-hooks", async (_event, target: AgentHookTarget) => {
+    await installAgentHooks(target);
     await refreshWorkBuddyIntegration();
-    return workBuddyIntegration;
+    return workBuddyIntegrations.find((item) => item.id === target) ?? null;
+  });
+  ipcMain.handle("workbuddy:remove-hooks", async (_event, target: AgentHookTarget) => {
+    await uninstallAgentHooks(target);
+    await refreshWorkBuddyIntegration();
+    return workBuddyIntegrations.find((item) => item.id === target) ?? null;
   });
   ipcMain.on("workbuddy:open-event-dir", openWorkBuddyEventDir);
   ipcMain.on("workbuddy:show-status", showWorkBuddyDetails);

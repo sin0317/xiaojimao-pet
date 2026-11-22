@@ -48,15 +48,7 @@ export function useSnapshot(): AppSnapshot {
     focusActive: false,
     dogVisible: true,
     workBuddy: EMPTY_WORKBUDDY_STATUS,
-    workBuddyIntegration: {
-      settingsPath: "",
-      scriptPath: "",
-      eventDir: "",
-      installed: false,
-      workBuddyDetected: false,
-      error: null,
-      checkedAt: 0
-    }
+    workBuddyIntegrations: []
   });
 
   useEffect(() => {

@@ -2,6 +2,24 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.2.0 — 2026-11-22
+
+### 新增
+
+- **多 agent 接入**：WorkBuddy、Qoder、Trae 三家都能把任务状态同步到桌宠
+  - 状态牌第二行显示来源 agent（WorkBuddy / Qoder / Trae），气泡文案也带上 agent 名
+  - 设置页按 agent 分别显示「已接入 / 未接入」，可逐个接入 / 移除
+  - Qoder 写入 `~/.qoder/settings.json`，Trae 写入 `~/.trae-cn/hooks.json`，均使用 PowerShell 桥脚本
+- 事件目录按 agent 分文件夹（`~/.xiaojimao/workbuddy-events/<Agent>/`），多 agent 并行互不干扰
+
+### 变更
+
+- 气泡文案不再附加项目名后缀，改为「Qoder 在等你选一下～」这种带 agent 的说法
+
+### 说明
+
+- DeepSeek Harness 没有钩子接口，只有 Cordis 插件体系，暂未接入
+
 ## 1.1.1 — 2026-11-22
 
 ### 修复

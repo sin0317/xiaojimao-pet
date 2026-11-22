@@ -40,28 +40,37 @@
 - **工作日配置**：周一到周日任选，默认周一到周五
 - 原有能力保留：休息提醒、喝水提醒、专注模式、分心检测、自定义 GIF 形象
 
-## WorkBuddy 任务状态
+## 任务状态（WorkBuddy / Qoder / Trae）
 
-接入 WorkBuddy 后，桌宠抬头就能看出任务进度：
+接入后，桌宠抬头就能看出当前 agent 的任务进度，状态牌第二行标明来源（WorkBuddy / Qoder / Trae）：
 
 | 状态 | 桌面表现 | 触发事件 |
 | --- | --- | --- |
-| 任务中 | 左上角暖色任务牌 + 宠物进入专注姿态 + 暖光 | `UserPromptSubmit` |
-| 等你选 | 左上角橙红任务牌 + 宠物轻推一下 + 气泡/系统通知 | `Notification`、`PreToolUse`（AskUserQuestion / ExitPlanMode） |
-| 已完成 | 左上角绿牌 + 宠物跳两下 + 完成气泡 | `Stop`、`FinalStop` |
+| 任务中 | 暖色任务牌 + 宠物专注姿态 + 暖光 | `UserPromptSubmit` |
+| 等你选 | 橙红任务牌 + 宠物轻推一下 + 气泡/系统通知 | `Notification`、`PreToolUse`（AskUserQuestion / ExitPlanMode） |
+| 已完成 | 绿牌 + 宠物跳两下 + 完成气泡 | `Stop`、`FinalStop` |
 
-多会话并行时按「等你选 > 任务中 > 已完成」取最需要你注意的那个，任务牌上会显示次数。
+多会话、多 agent 并行时按「等你选 > 任务中 > 已完成」取最需要你注意的那个，任务牌上会显示次数。
 
-**怎么接入**：设置 →「任务」→ 点「接入 WorkBuddy」，然后重启 WorkBuddy。按钮会把钩子写进
-`~/.workbuddy/settings.json`（保留你已有的钩子，改动前自动备份为 `settings.json.xiaojimao-<时间>`），
-并在 `~/.workbuddy/hooks/xiaojimao-status.sh` 放一个只负责落盘的小脚本。点「移除接入」可完整还原。
+**怎么接入**：设置 →「任务」→ 对应 agent 点「接入」，然后重启那个 agent。按钮只往配置里追加自己的钩子，
+原有钩子保留，改动前自动备份为 `<配置名>.xiaojimao-<时间>`；点「移除接入」可完整还原。
 
-**数据流**：WorkBuddy 钩子把事件 JSON 写进 `~/.xiaojimao/workbuddy-events/`（一次事件一个文件，
+| Agent | 配置文件 | 落盘脚本 | 执行 shell |
+| --- | --- | --- | --- |
+| WorkBuddy | `~/.workbuddy/settings.json` | `~/.workbuddy/hooks/xiaojimao-status.sh` | Git Bash |
+| Qoder | `~/.qoder/settings.json` | `~/.qoder/hooks/xiaojimao-status.ps1` | PowerShell |
+| Trae | `~/.trae-cn/hooks.json` | `~/.trae-cn/hooks/xiaojimao-status.ps1` | PowerShell |
+
+**数据流**：钩子把事件 JSON 写进 `~/.xiaojimao/workbuddy-events/<Agent>/`（一次事件一个文件，
 写完即改名，桌宠每 0.8 秒消费一次并删除），桌宠在 `src/shared/workbuddy.ts` 里把事件折算成三态。
 不监听端口，不需要额外权限。
 
-已知边界：如果模型只是用文字提问（没有调用询问工具），钩子里只能看到 `Stop`，会显示「已完成」；
-「等你选」靠询问工具与通知事件识别，命中后保持 45 分钟或直到你再次发消息。
+已知边界：
+
+- 模型只用文字提问（没调用询问工具）时，钩子只能看到 `Stop`，会显示「已完成」；
+  「等你选」靠询问工具与通知事件识别，命中后保持 45 分钟或直到你再次发消息
+- Trae 需要在它自己的 Hooks 设置里打开开关，否则写了配置也不会触发
+- DeepSeek Harness 没有钩子接口（只有 Cordis 插件体系），暂未接入
 
 ## 界面
 

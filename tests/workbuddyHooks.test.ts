@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  agentHookPaths,
+  buildPowerShellHookScript,
   buildStatusHookScript,
+  hasAgentHooks,
   hasWorkBuddyHooks,
+  mergeAgentHooks,
   mergeWorkBuddyHooks,
   removeWorkBuddyHooks,
   toBashPath,
@@ -42,9 +46,46 @@ export const tests = [
     run(): void {
       const paths = workBuddyPaths("C:\\Users\\sin");
       assert.ok(paths.settingsPath.endsWith("settings.json"));
-      assert.ok(paths.scriptPath.endsWith(WORKBUDDY_HOOK_MARKER));
+      assert.ok(paths.scriptPath.includes(WORKBUDDY_HOOK_MARKER));
       assert.ok(paths.eventDir.endsWith("workbuddy-events"));
       assert.equal(paths.hookCommand, COMMAND);
+    }
+  },
+  {
+    name: "qoder and trae use their own config files and PowerShell",
+    run(): void {
+      const qoder = agentHookPaths("qoder", "C:\\Users\\sin");
+      assert.ok(qoder.settingsPath.endsWith(".qoder\\settings.json"));
+      assert.ok(qoder.hookCommand.startsWith("powershell"));
+      assert.ok(qoder.hookCommand.includes("xiaojimao-status.ps1"));
+
+      const trae = agentHookPaths("trae", "C:\\Users\\sin");
+      assert.ok(trae.settingsPath.endsWith(".trae-cn\\hooks.json"));
+      assert.ok(trae.scriptPath.endsWith("xiaojimao-status.ps1"));
+    }
+  },
+  {
+    name: "trae hook config only uses events trae supports",
+    run(): void {
+      const merged = mergeAgentHooks({}, "trae", "powershell -File xiaojimao-status.ps1") as {
+        hooks: Record<string, unknown[]>;
+      };
+      assert.deepEqual(Object.keys(merged.hooks).sort(), [
+        "Notification",
+        "PreToolUse",
+        "Stop",
+        "UserPromptSubmit"
+      ]);
+      assert.ok(hasAgentHooks(merged, "trae"));
+    }
+  },
+  {
+    name: "powerShell hook script stamps the agent directory",
+    run(): void {
+      const script = buildPowerShellHookScript("C:\\Users\\sin\\.xiaojimao\\workbuddy-events", "Qoder");
+      assert.match(script, /\$agent = 'Qoder'/);
+      assert.match(script, /Join-Path \$root \$agent/);
+      assert.match(script, /\[Console\]::In\.ReadToEnd\(\)/);
     }
   },
   {

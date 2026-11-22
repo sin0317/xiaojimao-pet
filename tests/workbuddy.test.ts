@@ -107,6 +107,38 @@ export const tests = [
     }
   },
   {
+    name: "session keeps the agent that produced the event",
+    run(): void {
+      const fromPayload = applyWorkBuddyEvents({}, [
+        {
+          payload: {
+            session_id: "s1",
+            hook_event_name: "UserPromptSubmit",
+            cwd: "d:\\WorkBuddy\\PawPal",
+            client: "WorkBuddy"
+          },
+          at: T0
+        }
+      ]);
+      assert.equal(fromPayload.s1.agent, "WorkBuddy");
+
+      const fromDir = applyWorkBuddyEvents({}, [
+        {
+          payload: { session_id: "s2", hook_event_name: "UserPromptSubmit", cwd: "d:\\proj" },
+          at: T0,
+          agent: "qoder"
+        },
+        {
+          payload: { session_id: "s3", hook_event_name: "UserPromptSubmit", cwd: "d:\\proj" },
+          at: T0,
+          agent: "trae"
+        }
+      ]);
+      assert.equal(fromDir.s2.agent, "Qoder");
+      assert.equal(fromDir.s3.agent, "Trae");
+    }
+  },
+  {
     name: "SessionEnd removes the session",
     run(): void {
       const sessions = sessionsOf([event("UserPromptSubmit", { prompt: "A" }), event("SessionEnd", {}, T0 + 10)]);
