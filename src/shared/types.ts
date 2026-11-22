@@ -12,6 +12,36 @@ export type {
 
 export type BuiltInPetAppearanceId = "lovartPuppy" | "lineDog" | "xiaoJiMao";
 
+/** 诊断页里单个 agent 的健康状况 */
+export type AgentDiagnostics = {
+  id: string;
+  label: string;
+  /** 钩子/插件是否已接入 */
+  installed: boolean;
+  /** 本机有没有这个 agent 的配置目录 */
+  detected: boolean;
+  settingsPath: string;
+  settingsExists: boolean;
+  scriptPath: string;
+  scriptExists: boolean;
+  /** 本次运行收到的最后一条事件 */
+  lastEventAt: number | null;
+  lastEventName: string | null;
+  eventsThisRun: number;
+  error: string | null;
+};
+
+export type Diagnostics = {
+  version: string;
+  platform: string;
+  arch: string;
+  userDataPath: string;
+  eventDir: string;
+  eventDirExists: boolean;
+  generatedAt: number;
+  agents: AgentDiagnostics[];
+};
+
 export type PetAppearanceId = BuiltInPetAppearanceId | "custom";
 
 export type PetFacing = "left" | "right";

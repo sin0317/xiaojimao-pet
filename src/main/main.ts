@@ -1,9 +1,11 @@
 import { basename, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -26,6 +28,7 @@ import { computeWork, dateKeyOf, formatDuration } from "../shared/workClock";
 import {
   applyWorkBuddyEvents,
   EMPTY_WORKBUDDY_STATUS,
+  normalizeAgentName,
   primaryWorkBuddySession,
   summarizeWorkBuddy
 } from "../shared/workbuddy";
@@ -40,8 +43,10 @@ import type {
 } from "../shared/workbuddy";
 import type {
   AppSnapshot,
+  AgentDiagnostics,
   BlockingMode,
   CustomPetAsset,
+  Diagnostics,
   DistractionStatus,
   DemoTrigger,
   PetFacing,
@@ -93,9 +98,11 @@ import {
   createInitialUpdateCheck
 } from "./updates";
 import {
+  detectAgentIntegration,
   detectAllAgents,
   installAgentHooks,
   resolveWorkBuddyEventDir,
+  SUPPORTED_AGENT_TARGETS,
   uninstallAgentHooks
 } from "./workbuddyHooks";
 
@@ -168,6 +175,10 @@ let updateCheck: UpdateCheckResult = createInitialUpdateCheck();
 let workBuddySessions: Record<string, WorkBuddySession> = {};
 let workBuddyStatus: WorkBuddyStatus = EMPTY_WORKBUDDY_STATUS;
 let workBuddyIntegrations: AgentIntegration[] = [];
+
+/** 诊断页用：本次运行里每个 agent 的事件统计（不落盘） */
+type AgentEventStat = { lastAt: number; lastName: string; count: number };
+const agentEventStats = new Map<string, AgentEventStat>();
 let workBuddyTimer: NodeJS.Timeout | null = null;
 let workBuddyIngesting = false;
 let petRendererReady = false;
@@ -1107,11 +1118,18 @@ async function ingestWorkBuddyEvents(): Promise<void> {
         const raw = await readFile(item.path, "utf8");
         const payload = JSON.parse(raw) as unknown;
         if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-          events.push({
-            payload: payload as WorkBuddyHookPayload,
-            at: mtimeMs,
-            agent: item.agent
-          });
+          const hookPayload = payload as WorkBuddyHookPayload;
+          events.push({ payload: hookPayload, at: mtimeMs, agent: item.agent });
+
+          // 诊断页：记录每个 agent 最近一条事件与累计条数
+          const label = normalizeAgentName(
+            hookPayload.agent ?? hookPayload.client ?? item.agent
+          );
+          const stat = agentEventStats.get(label) ?? { lastAt: 0, lastName: "", count: 0 };
+          stat.lastAt = mtimeMs;
+          stat.lastName = typeof hookPayload.hook_event_name === "string" ? hookPayload.hook_event_name : "";
+          stat.count += 1;
+          agentEventStats.set(label, stat);
         }
       } catch {
         // 坏文件直接清掉，避免反复重试
@@ -1153,6 +1171,77 @@ function scheduleWorkBuddyBridge(): void {
 async function refreshWorkBuddyIntegration(): Promise<void> {
   workBuddyIntegrations = await detectAllAgents();
   publishSnapshot();
+}
+
+function toAgentDiagnostics(input: {
+  id: string;
+  label: string;
+  installed: boolean;
+  detected: boolean;
+  settingsPath: string;
+  scriptPath: string;
+  error: string | null;
+}): AgentDiagnostics {
+  const stat = agentEventStats.get(input.label);
+  return {
+    ...input,
+    settingsExists: input.settingsPath ? existsSync(input.settingsPath) : false,
+    scriptExists: input.scriptPath ? existsSync(input.scriptPath) : false,
+    lastEventAt: stat?.lastAt ?? null,
+    lastEventName: stat?.lastName || null,
+    eventsThisRun: stat?.count ?? 0
+  };
+}
+
+/**
+ * 诊断页的数据源：每个 agent 装没装、文件在不在、这次运行有没有收到事件。
+ * 「装了但没事件」和「压根没装」要能一眼分开，排障就靠这个。
+ */
+async function buildDiagnostics(): Promise<Diagnostics> {
+  const eventDir = resolveWorkBuddyEventDir();
+  const agents: AgentDiagnostics[] = [];
+
+  for (const target of SUPPORTED_AGENT_TARGETS) {
+    const integration = await detectAgentIntegration(target);
+    agents.push(
+      toAgentDiagnostics({
+        id: target,
+        label: integration.label,
+        installed: integration.installed,
+        detected: integration.detected,
+        settingsPath: integration.settingsPath,
+        scriptPath: integration.scriptPath,
+        error: integration.error
+      })
+    );
+  }
+
+  // DeepSeek Harness 走 Cordis 插件，检查 profile 里的依赖是否装了
+  const home = app.getPath("home");
+  const dshProfile = join(home, ".dsh", "profiles", "desktop");
+  const dshPlugin = join(dshProfile, "node_modules", "dsh-xiaojimao-bridge");
+  agents.push(
+    toAgentDiagnostics({
+      id: "dsh",
+      label: "DeepSeek Harness",
+      installed: existsSync(dshPlugin),
+      detected: existsSync(join(home, ".dsh")),
+      settingsPath: join(dshProfile, "cordis.patch.yml"),
+      scriptPath: join(dshPlugin, "index.js"),
+      error: null
+    })
+  );
+
+  return {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    userDataPath: app.getPath("userData"),
+    eventDir,
+    eventDirExists: existsSync(eventDir),
+    generatedAt: Date.now(),
+    agents
+  };
 }
 
 function showWorkBuddyDetails(): void {
@@ -1606,6 +1695,12 @@ function registerIpc(): void {
   });
   ipcMain.on("workbuddy:open-event-dir", openWorkBuddyEventDir);
   ipcMain.on("workbuddy:show-status", showWorkBuddyDetails);
+
+  ipcMain.handle("diagnostics:get", () => buildDiagnostics());
+  ipcMain.handle("clipboard:write", (_event, text: unknown) => {
+    clipboard.writeText(String(text ?? ""));
+    return true;
+  });
   ipcMain.on("work:checkout", () => {
     const settings = getSettings();
     const now = new Date();

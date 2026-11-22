@@ -5,6 +5,7 @@ import type {
   AppSnapshot,
   CustomPetAsset,
   DemoTrigger,
+  Diagnostics,
   PetState,
   Settings,
   SpeechBubble,
@@ -54,6 +55,8 @@ const api = {
     ipcRenderer.invoke("workbuddy:remove-hooks", target),
   openWorkBuddyEventDir: (): void => ipcRenderer.send("workbuddy:open-event-dir"),
   showWorkBuddyStatus: (): void => ipcRenderer.send("workbuddy:show-status"),
+  getDiagnostics: (): Promise<Diagnostics> => ipcRenderer.invoke("diagnostics:get"),
+  writeClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke("clipboard:write", text),
   onPetState: (callback: (state: PetState) => void): Unsubscribe =>
     onChannel("pet:set-state", callback),
   onShowBubble: (callback: (bubble: SpeechBubble) => void): Unsubscribe =>

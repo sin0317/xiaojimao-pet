@@ -11,11 +11,13 @@ import {
   resolvePetAppearanceId
 } from "../../../shared/petAppearances";
 import type {
+  AgentDiagnostics,
   AgentHookTarget,
   BuiltInPetAppearanceId,
   CustomPetAppearance,
   CustomPetAsset,
   DemoTrigger,
+  Diagnostics,
   PetState,
   Settings,
   UpdateCheckResult
@@ -449,6 +451,41 @@ function customPetAssetPreviewSrc(asset: CustomPetAsset): string {
   return new URL(window.pawpal.assetUrl(asset.relativePath)).href;
 }
 
+/** 诊断页：agent 最近一条事件有多久了 */
+function diagAgo(ts: number, labels: SettingsCopy): string {
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < 60_000) return labels.diagJustNow;
+  if (diff < 3_600_000) return labels.diagMinutesAgo(Math.round(diff / 60_000));
+  return labels.diagHoursAgo(Math.round(diff / 3_600_000));
+}
+
+/** 「装没装 / 有没有事件」必须一眼分得开，这是排障的关键 */
+function formatAgentDiag(item: AgentDiagnostics, labels: SettingsCopy): string {
+  const parts: string[] = [];
+
+  if (item.installed) {
+    parts.push(item.id === "dsh" ? labels.diagPluginInstalled : labels.workBuddyInstalled);
+  } else if (item.detected) {
+    parts.push(labels.workBuddyNotInstalled);
+  } else {
+    return labels.none;
+  }
+
+  if (item.installed && !item.scriptExists) parts.push(labels.diagMissingFile);
+  if (item.error) parts.push(item.error);
+
+  if (item.lastEventAt) {
+    parts.push(
+      `${item.lastEventName ?? ""} ${diagAgo(item.lastEventAt, labels)}`.trim()
+    );
+  } else {
+    parts.push(labels.diagNoEvent);
+  }
+  if (item.eventsThisRun > 0) parts.push(labels.diagEventCount(item.eventsThisRun));
+
+  return parts.join(" · ");
+}
+
 export function SettingsView(): JSX.Element {
   const snapshot = useSnapshot();
   const { settings, stats, updateCheck } = snapshot;
@@ -457,6 +494,36 @@ export function SettingsView(): JSX.Element {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [customEditorOpen, setCustomEditorOpen] = useState(settings.petAppearanceId === "custom");
   const [workBuddyBusy, setWorkBuddyBusy] = useState<AgentHookTarget | null>(null);
+  const [agentDiag, setAgentDiag] = useState<Diagnostics | null>(null);
+  const [diagCopied, setDiagCopied] = useState(false);
+
+  useEffect(() => {
+    if (!diagnosticsOpen) return;
+    let cancelled = false;
+    void window.pawpal.getDiagnostics().then((next) => {
+      if (!cancelled) setAgentDiag(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [diagnosticsOpen]);
+
+  async function refreshAgentDiagnostics(): Promise<void> {
+    setAgentDiag(await window.pawpal.getDiagnostics());
+  }
+
+  async function copyDiagnosticsText(): Promise<void> {
+    const data = agentDiag ?? (await window.pawpal.getDiagnostics());
+    setAgentDiag(data);
+    const lines = [
+      `XiaoJiMao Pet ${data.version} (${data.platform} ${data.arch})`,
+      `eventDir: ${data.eventDir}`,
+      ...data.agents.map((item) => `- ${item.label}: ${formatAgentDiag(item, labels)}`)
+    ];
+    await window.pawpal.writeClipboard(lines.join("\n"));
+    setDiagCopied(true);
+    setTimeout(() => setDiagCopied(false), 2000);
+  }
   const [workBuddyError, setWorkBuddyError] = useState<string | null>(null);
   const now = useNow();
   const savedSettingsKey = JSON.stringify(settings);
@@ -1227,6 +1294,28 @@ export function SettingsView(): JSX.Element {
         </button>
         {diagnosticsOpen ? (
           <div className="prefs__diag">
+            <DiagGroup title={labels.diagAgents}>
+              {(agentDiag?.agents ?? []).map((item) => (
+                <DiagCard key={item.id} label={item.label} value={formatAgentDiag(item, labels)} />
+              ))}
+            </DiagGroup>
+            <div className="prefs__diag-actions">
+              <button
+                type="button"
+                className="pref-button"
+                onClick={() => void refreshAgentDiagnostics()}
+              >
+                {labels.diagRefresh}
+              </button>
+              <button
+                type="button"
+                className="pref-button"
+                onClick={() => void copyDiagnosticsText()}
+              >
+                {diagCopied ? labels.diagCopied : labels.diagCopy}
+              </button>
+            </div>
+
             <DiagGroup title={labels.runtime}>
               <DiagCard label={labels.state} value={snapshot.petState} />
               <DiagCard

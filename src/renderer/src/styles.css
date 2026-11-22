@@ -1421,12 +1421,17 @@ textarea {
 }
 
 .prefs__diag-note,
+.prefs__diag-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 0 4px;
+}
+
 .prefs__diag-hint {
   color: var(--ink-soft);
   font-size: 12.5px;
   line-height: 1.5;
-  margin: 0;
-}
+  margin: 0;}
 
 .prefs__diag-note {
   background: rgba(60, 47, 28, 0.04);
