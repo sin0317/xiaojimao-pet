@@ -1331,12 +1331,13 @@ export function SettingsView(): JSX.Element {
             />
             <Row
               label={labels.workBuddyEventDir}
-              hint={eventDir || labels.none}
+              hint={labels.workBuddyEventDirHint}
               control={
                 <div className="pref-button-group">
                   <button
                     type="button"
                     className="pref-button"
+                    title={eventDir || undefined}
                     onClick={window.pawpal.openWorkBuddyEventDir}
                   >
                     {labels.workBuddyOpenDir}
