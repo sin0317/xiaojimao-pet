@@ -125,7 +125,10 @@ export const I18N = {
         (agent: string) => `${agent} 的任务做完啦！摇尾巴～`,
         (agent: string) => `${agent} 搞定一个，休息一下？`,
         (agent: string) => `${agent} 完成！我帮你记着`
-      ]
+      ],
+      approvalTitle: (agent: string, tool: string) => `${agent} 想执行 ${tool}`,
+      approvalAllowed: "已允许，放行～",
+      approvalDenied: "已拒绝，拦下了",
     },
     actions: {
       breakDone: "我站起来了",
@@ -136,7 +139,9 @@ export const I18N = {
       hydrationSnooze: "稍后提醒",
       focusBack: "回去工作",
       focusEnd: "结束专注",
-      workBuddyDismiss: "知道啦"
+      workBuddyDismiss: "知道啦",
+      approvalAllow: "允许",
+      approvalDeny: "拒绝",
     },
     menu: {
       showDog: "显示宠物",
@@ -487,7 +492,10 @@ export const I18N = {
         (agent: string) => `${agent} finished a task! *tail wag*`,
         (agent: string) => `${agent} closed one out — take a breather?`,
         (agent: string) => `${agent} is done! I'm keeping track`
-      ]
+      ],
+      approvalTitle: (agent: string, tool: string) => `${agent} wants to run ${tool}`,
+      approvalAllowed: "Allowed — go ahead",
+      approvalDenied: "Denied — blocked",
     },
     actions: {
       breakDone: "I stood up",
@@ -498,7 +506,9 @@ export const I18N = {
       hydrationSnooze: "Remind later",
       focusBack: "Back to work",
       focusEnd: "End Focus",
-      workBuddyDismiss: "Got it"
+      workBuddyDismiss: "Got it",
+      approvalAllow: "Allow",
+      approvalDeny: "Deny",
     },
     menu: {
       showDog: "Show Pet",

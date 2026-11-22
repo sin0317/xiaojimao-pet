@@ -98,9 +98,17 @@ import {
   createInitialUpdateCheck
 } from "./updates";
 import {
+  dropApprovalRequest,
+  isApprovalExpired,
+  listApprovalRequests,
+  writeApprovalAnswer,
+  type ApprovalRequest
+} from "./approvals";
+import {
   detectAgentIntegration,
   detectAllAgents,
   installAgentHooks,
+  resolveApprovalDir,
   resolveWorkBuddyEventDir,
   SUPPORTED_AGENT_TARGETS,
   uninstallAgentHooks
@@ -179,6 +187,12 @@ let workBuddyIntegrations: AgentIntegration[] = [];
 /** 诊断页用：本次运行里每个 agent 的事件统计（不落盘） */
 type AgentEventStat = { lastAt: number; lastName: string; count: number };
 const agentEventStats = new Map<string, AgentEventStat>();
+
+/** 权限气泡：同一时刻只问一件事，其余排队等下一轮 */
+let activeApproval: ApprovalRequest | null = null;
+let approvalTimer: NodeJS.Timeout | null = null;
+let lastPetHeartbeatAt = 0;
+const APPROVAL_POLL_MS = 400;
 let workBuddyTimer: NodeJS.Timeout | null = null;
 let workBuddyIngesting = false;
 let petRendererReady = false;
@@ -1151,6 +1165,10 @@ function scheduleWorkBuddyBridge(): void {
     clearInterval(workBuddyTimer);
     workBuddyTimer = null;
   }
+  if (approvalTimer) {
+    clearInterval(approvalTimer);
+    approvalTimer = null;
+  }
 
   if (!getSettings().workBuddyEnabled) {
     if (needsInputNoticeTimer) {
@@ -1158,14 +1176,72 @@ function scheduleWorkBuddyBridge(): void {
       needsInputNoticeTimer = null;
     }
     workBuddySessions = {};
+    activeApproval = null;
     applyWorkBuddyStatus(EMPTY_WORKBUDDY_STATUS);
     return;
   }
 
   void mkdir(resolveWorkBuddyEventDir(), { recursive: true }).catch(() => undefined);
+  void mkdir(resolveApprovalDir(), { recursive: true }).catch(() => undefined);
   // 等桌宠窗口挂好监听再消费历史事件，否则气泡会打在空气里
   setTimeout(() => void ingestWorkBuddyEvents(), 900);
   workBuddyTimer = setInterval(() => void ingestWorkBuddyEvents(), 800);
+  approvalTimer = setInterval(() => void pollApprovals(), APPROVAL_POLL_MS);
+}
+
+/**
+ * 权限气泡：钩子把请求写进审批目录，这里轮询、弹气泡、写答复。
+ * 到点没答复就写 defer，钩子那边直接放行给 agent 自己的弹窗——绝不替用户做主。
+ */
+async function pollApprovals(): Promise<void> {
+  if (!getSettings().workBuddyEnabled || blockingMode) return;
+  // 渲染进程没挂好就别弹，否则消息发丢、请求还挂在 activeApproval 上
+  if (!petRendererReady) return;
+
+  const dir = resolveApprovalDir();
+  const now = Date.now();
+
+  // 心跳：钩子脚本看到这个文件新鲜才肯等，桌宠没开就立刻放回给 agent
+  if (now - lastPetHeartbeatAt > 5000) {
+    lastPetHeartbeatAt = now;
+    void writeFile(join(dir, ".pet-alive"), String(now), "utf8").catch(() => undefined);
+  }
+
+  if (activeApproval) {
+    if (isApprovalExpired(activeApproval, now)) {
+      const expired = activeApproval;
+      activeApproval = null;
+      await writeApprovalAnswer(dir, expired.id, "defer");
+      await dropApprovalRequest(dir, expired.id);
+      hideBubble({ onlyId: `approval-${expired.id}` });
+    }
+    return;
+  }
+
+  const [next] = await listApprovalRequests(dir);
+  if (!next) return;
+
+  if (isApprovalExpired(next, now)) {
+    await writeApprovalAnswer(dir, next.id, "defer");
+    await dropApprovalRequest(dir, next.id);
+    return;
+  }
+
+  activeApproval = next;
+  ensurePetWindowVisible();
+  const labels = text();
+  const remaining = Math.max(3000, next.expiresAt * 1000 - now);
+  showBubble({
+    id: `approval-${next.id}`,
+    message: [labels.bubble.approvalTitle(next.agent, next.tool), next.detail]
+      .filter(Boolean)
+      .join("\n"),
+    actions: [
+      { id: `approval:allow:${next.id}`, label: labels.actions.approvalAllow, kind: "primary" },
+      { id: `approval:deny:${next.id}`, label: labels.actions.approvalDeny, kind: "danger" }
+    ],
+    autoDismissMs: remaining
+  });
 }
 
 async function refreshWorkBuddyIntegration(): Promise<void> {
@@ -1575,6 +1651,23 @@ function triggerDemo(trigger: DemoTrigger): void {
 }
 
 function handleBubbleAction(actionId: string): void {
+  if (actionId.startsWith("approval:")) {
+    const [, decision, id] = actionId.split(":");
+    const approval = activeApproval;
+    if (approval && approval.id === id && (decision === "allow" || decision === "deny")) {
+      activeApproval = null;
+      const dir = resolveApprovalDir();
+      void writeApprovalAnswer(dir, id, decision).then(() => dropApprovalRequest(dir, id));
+      const labels = text();
+      showBubble({
+        id: "approval-ack",
+        message:
+          decision === "allow" ? labels.bubble.approvalAllowed : labels.bubble.approvalDenied,
+        autoDismissMs: 1600
+      });
+    }
+    return;
+  }
   if (actionId === "workbuddy:dismiss") {
     hideBubble();
     if (!blockingMode) {
@@ -1793,7 +1886,8 @@ app.on("before-quit", () => {
     bubbleTimer,
     dragTimer,
     dragSafetyTimer,
-    workBuddyTimer
+    workBuddyTimer,
+    approvalTimer
   ]) {
     if (timer) clearTimeout(timer);
   }

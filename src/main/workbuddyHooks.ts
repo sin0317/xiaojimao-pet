@@ -30,7 +30,9 @@ import type { AgentHookTarget, AgentIntegration } from "../shared/workbuddy";
 
 export const WORKBUDDY_HOOK_SCRIPT_NAME = "xiaojimao-status.sh";
 export const AGENT_HOOK_SCRIPT_NAME = "xiaojimao-status.ps1";
+export const AGENT_APPROVAL_SCRIPT_NAME = "xiaojimao-approve.ps1";
 export const WORKBUDDY_HOOK_MARKER = "xiaojimao-status";
+export const AGENT_APPROVAL_MARKER = "xiaojimao-approve";
 const BACKUP_LIMIT = 3;
 
 type HookEntry = {
@@ -51,6 +53,8 @@ type EventSpec = {
   event: string;
   matcher: string;
   timeout: number;
+  /** 用哪支脚本：状态桥，还是「等你决定」的审批桥 */
+  script?: "status" | "approval";
 };
 
 export const AGENT_LABELS: Record<AgentHookTarget, string> = {
@@ -74,7 +78,9 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
     { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
     { event: "Notification", matcher: "", timeout: 10 },
     { event: "Stop", matcher: "", timeout: 10 },
-    { event: "SessionEnd", matcher: "", timeout: 10 }
+    { event: "SessionEnd", matcher: "", timeout: 10 },
+    // 权限管道判定要问人之后、弹窗之前触发，可以在这里替用户回答
+    { event: "PermissionRequest", matcher: "", timeout: 40, script: "approval" }
   ],
   trae: [
     { event: "UserPromptSubmit", matcher: "", timeout: 10 },
@@ -94,16 +100,27 @@ export type AgentHookPaths = {
   settingsPath: string;
   /** 落盘脚本 */
   scriptPath: string;
+  /** 审批脚本（只有支持拦截的 agent 才有实际内容） */
+  approvalScriptPath: string;
   /** 事件目录（脚本写这里，桌宠读这里） */
   eventDir: string;
+  /** 审批目录（脚本写请求，桌宠写答复） */
+  approvalDir: string;
   /** 写进配置的命令 */
   hookCommand: string;
+  /** 写进审批事件的命令 */
+  approvalCommand: string;
   /** 该 agent 的配置目录是否存在 */
   detected: boolean;
 };
 
 export function resolveWorkBuddyEventDir(home = homedir()): string {
   return join(home, ".xiaojimao", "workbuddy-events");
+}
+
+/** 审批请求/答复文件放这里，桌宠每 400ms 轮询一次 */
+export function resolveApprovalDir(home = homedir()): string {
+  return join(home, ".xiaojimao", "workbuddy-approvals");
 }
 
 /** Windows 路径转 Git Bash 风格，供钩子脚本里使用 */
@@ -120,32 +137,46 @@ function toWindowsPath(input: string): string {
 
 export function agentHookPaths(target: AgentHookTarget, home = homedir()): AgentHookPaths {
   const eventDir = resolveWorkBuddyEventDir(home);
+  const approvalDir = resolveApprovalDir(home);
 
   if (target === "workbuddy") {
     const dir = join(home, ".workbuddy");
     const scriptPath = join(dir, "hooks", WORKBUDDY_HOOK_SCRIPT_NAME);
+    const approvalScriptPath = join(dir, "hooks", AGENT_APPROVAL_SCRIPT_NAME);
     return {
       target,
       label: AGENT_LABELS[target],
       settingsPath: join(dir, "settings.json"),
       scriptPath,
+      approvalScriptPath,
       eventDir,
+      approvalDir,
       hookCommand: `bash '${toBashPath(scriptPath)}'`,
+      // WorkBuddy 桌面端权限在自己的原生弹窗里，钩子拿不到，留空
+      approvalCommand: "",
       detected: existsSync(dir)
     };
   }
 
   const base = target === "qoder" ? join(home, ".qoder") : join(home, ".trae-cn");
   const scriptPath = join(base, "hooks", AGENT_HOOK_SCRIPT_NAME);
+  const approvalScriptPath = join(base, "hooks", AGENT_APPROVAL_SCRIPT_NAME);
   return {
     target,
     label: AGENT_LABELS[target],
     settingsPath: target === "qoder" ? join(base, "settings.json") : join(base, "hooks.json"),
     scriptPath,
+    approvalScriptPath,
     eventDir,
+    approvalDir,
     hookCommand: `powershell -NoProfile -ExecutionPolicy Bypass -File "${toWindowsPath(
       scriptPath
     )}"`,
+    // 只有 Qoder 的 PermissionRequest 能回答；Trae 的 Notification 是异步的，拦不住
+    approvalCommand:
+      target === "qoder"
+        ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${toWindowsPath(approvalScriptPath)}"`
+        : "",
     detected: existsSync(base)
   };
 }
@@ -210,6 +241,121 @@ exit 0
 `;
 }
 
+/**
+ * Qoder 用：权限审批桥。挂在 PermissionRequest（判定要问人之后、弹窗前），
+ * 把请求丢给桌宠，等用户点「允许 / 拒绝」，再按 Qoder 的协议回话。
+ * 等不到答复就什么都不输出，交回 Qoder 自己的弹窗——绝不能让 agent 卡住。
+ */
+export function buildApprovalScript(
+  agent: string,
+  eventDir: string,
+  approvalDir: string,
+  waitSeconds = 25
+): string {
+  return `# ${AGENT_APPROVAL_SCRIPT_NAME} — 小鸡毛桌宠 <-> ${agent} 权限审批桥
+# 由「小鸡毛桌宠」生成；在桌宠设置里点「移除接入」会删除本文件与对应钩子。
+$ErrorActionPreference = 'SilentlyContinue'
+$agent        = '${agent}'
+$root         = '${toWindowsPath(eventDir)}'
+$approvalRoot = '${toWindowsPath(approvalDir)}'
+$waitSeconds  = ${waitSeconds}
+
+# 宿主用重定向 stdin 传 JSON；最多等 2 秒，任何情况下都不能卡住 agent
+$payload = $null
+try {
+  if ([Console]::IsInputRedirected) {
+    $stdin  = [Console]::OpenStandardInput()
+    $reader = New-Object System.IO.StreamReader($stdin, [System.Text.Encoding]::UTF8)
+    $task   = $reader.ReadToEndAsync()
+    if ($task.Wait(2000)) { $payload = $task.Result }
+  }
+} catch { }
+if ([string]::IsNullOrWhiteSpace($payload)) { $payload = ($input | Out-String) }
+if ([string]::IsNullOrWhiteSpace($payload)) { exit 0 }
+
+$enc = New-Object System.Text.UTF8Encoding($false)
+
+# 顺手报一条状态，桌宠重启过也能知道「在等你」
+$dir = Join-Path $root $agent
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+$stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$statusTmp = Join-Path $dir ".tmp-$stamp-$PID"
+[System.IO.File]::WriteAllText($statusTmp, $payload.Trim(), $enc)
+Move-Item -LiteralPath $statusTmp -Destination (Join-Path $dir "$stamp-$PID.json") -Force
+
+# 取出工具名与参数摘要
+$tool = ''
+$detail = ''
+try {
+  $obj = $payload | ConvertFrom-Json
+  $tool = [string]$obj.tool_name
+  if ($null -ne $obj.tool_input) {
+    $cmd = [string]$obj.tool_input.command
+    if ($cmd) {
+      $detail = $cmd
+    } else {
+      $detail = ($obj.tool_input | ConvertTo-Json -Compress -Depth 4)
+    }
+    if ($detail.Length -gt 160) { $detail = $detail.Substring(0, 160) + '...' }
+  }
+} catch { }
+
+# 桌宠没开着就别等：心跳超过 20 秒就当作没人看，直接交回 Qoder
+New-Item -ItemType Directory -Force -Path $approvalRoot | Out-Null
+$alive = Join-Path $approvalRoot '.pet-alive'
+$aliveFresh = $false
+if (Test-Path $alive) {
+  $age = ((Get-Date) - (Get-Item $alive).LastWriteTime).TotalSeconds
+  if ($age -lt 20) { $aliveFresh = $true }
+}
+if (-not $aliveFresh) { exit 0 }
+
+$id = "$stamp-$PID"
+$req = @{
+  id        = $id
+  agent     = $agent
+  tool      = $tool
+  detail    = $detail
+  at        = $stamp
+  expiresAt = ($stamp + $waitSeconds)
+} | ConvertTo-Json -Compress
+$reqTmp = Join-Path $approvalRoot ".tmp-$id"
+[System.IO.File]::WriteAllText($reqTmp, $req, $enc)
+Move-Item -LiteralPath $reqTmp -Destination (Join-Path $approvalRoot "$id.req.json") -Force
+
+# 等桌宠答复
+$ansPath  = Join-Path $approvalRoot "$id.ans.json"
+$deadline = (Get-Date).AddSeconds($waitSeconds)
+$decision = ''
+while ((Get-Date) -lt $deadline) {
+  if (Test-Path $ansPath) {
+    try {
+      $ans = Get-Content -Raw $ansPath | ConvertFrom-Json
+      $decision = [string]$ans.decision
+    } catch { }
+    break
+  }
+  Start-Sleep -Milliseconds 200
+}
+Remove-Item -LiteralPath $ansPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $approvalRoot "$id.req.json") -Force -ErrorAction SilentlyContinue
+
+# 没等到答复：不输出、正常退出，把决定权还给 Qoder
+if ($decision -ne 'allow' -and $decision -ne 'deny') { exit 0 }
+
+$reason = ''
+if ($decision -eq 'allow') { $reason = '在桌宠上点了允许' } else { $reason = '在桌宠上点了拒绝' }
+$out = @{
+  hookSpecificOutput = @{
+    hookEventName = 'PermissionRequest'
+    decision      = @{ behavior = $decision; message = $reason }
+  }
+} | ConvertTo-Json -Compress -Depth 5
+Write-Output $out
+exit 0
+`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -218,36 +364,51 @@ function entryUsesOurHook(entry: unknown): boolean {
   if (!isRecord(entry)) return false;
   const hooks = entry.hooks;
   if (!Array.isArray(hooks)) return false;
-  return hooks.some(
-    (hook) => isRecord(hook) && String(hook.command ?? "").includes(WORKBUDDY_HOOK_MARKER)
-  );
+  return hooks.some((hook) => {
+    if (!isRecord(hook)) return false;
+    const command = String(hook.command ?? "");
+    return (
+      command.includes(WORKBUDDY_HOOK_MARKER) || command.includes(AGENT_APPROVAL_MARKER)
+    );
+  });
 }
 
 function hooksSection(config: Record<string, unknown>): HookConfig {
   return isRecord(config.hooks) ? { ...config.hooks } : {};
 }
 
-function hookEntryFor(target: AgentHookTarget, hookCommand: string): HookEntry {
+function hookEntryFor(
+  target: AgentHookTarget,
+  hookCommand: string,
+  timeout: number
+): HookEntry {
   if (target === "workbuddy") {
-    return { type: "command", command: hookCommand, timeout: 10 };
+    return { type: "command", command: hookCommand, timeout };
   }
   // Qoder 支持 shell 字段；Trae 忽略未知字段，写上也无害
-  return { type: "command", command: hookCommand, timeout: 10, shell: "powershell" };
+  return { type: "command", command: hookCommand, timeout, shell: "powershell" };
 }
 
 /** 合并前先剔掉自己旧的钩子，避免重复叠加 */
 export function mergeAgentHooks(
   config: Record<string, unknown>,
   target: AgentHookTarget,
-  hookCommand: string
+  hookCommand: string,
+  approvalCommand = ""
 ): Record<string, unknown> {
   const hooks = hooksSection(config);
-  const entry = hookEntryFor(target, hookCommand);
 
   for (const spec of TARGET_EVENTS[target]) {
+    const command = spec.script === "approval" ? approvalCommand : hookCommand;
+    // 没有审批命令的（WorkBuddy / Trae）就跳过这类事件，别写进配置
+    if (!command) continue;
+
     const current = Array.isArray(hooks[spec.event]) ? (hooks[spec.event] as unknown[]) : [];
     const kept = current.filter((item) => !entryUsesOurHook(item));
-    const group: HookGroup = { matcher: spec.matcher, hooks: [entry] };
+    const group: HookGroup = {
+      matcher: spec.matcher,
+      hooks: [hookEntryFor(target, command, spec.timeout)]
+    };
     hooks[spec.event] = [...kept, group];
   }
 
@@ -382,6 +543,12 @@ async function writeScript(paths: AgentHookPaths): Promise<void> {
       : buildPowerShellHookScript(paths.eventDir, paths.label);
   await writeFile(paths.scriptPath, body, "utf8");
   await chmod(paths.scriptPath, 0o755).catch(() => undefined);
+
+  // 只有能回答权限的 agent 才需要审批脚本
+  if (!paths.approvalCommand) return;
+  const approvalBody = buildApprovalScript(paths.label, paths.eventDir, paths.approvalDir);
+  await writeFile(paths.approvalScriptPath, approvalBody, "utf8");
+  await chmod(paths.approvalScriptPath, 0o755).catch(() => undefined);
 }
 
 export async function installAgentHooks(
@@ -396,7 +563,7 @@ export async function installAgentHooks(
     const { config, error } = await readConfigFile(paths.settingsPath);
     if (!config) return integrationOf(paths, false, error);
 
-    const merged = mergeAgentHooks(config, target, paths.hookCommand);
+    const merged = mergeAgentHooks(config, target, paths.hookCommand, paths.approvalCommand);
     if (existsSync(paths.settingsPath)) await backupSettings(paths.settingsPath);
     await writeConfigFile(paths.settingsPath, merged);
 
