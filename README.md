@@ -78,9 +78,12 @@ corepack pnpm@11.1.1 dev
 | WorkBuddy | `~/.workbuddy/settings.json` | Git Bash |
 | Qoder | `~/.qoder/settings.json` | PowerShell |
 | Trae | `~/.trae-cn/hooks.json` | PowerShell |
-| DeepSeek Harness | — | 没有钩子接口，暂不支持 |
+| DeepSeek Harness | `cordis.patch.yml` + 桥接插件 | Cordis 插件（见 [`integrations/dsh-bridge`](integrations/dsh-bridge/README.md)） |
 
-原理很轻：钩子只做一件事——把 stdin 的 JSON 落到 `~/.xiaojimao/workbuddy-events/<Agent>/`，桌宠每 0.8 秒消费一批并删掉。不监听端口、不申请权限、不联网。
+前三家设置页点「接入」即可；DeepSeek Harness 没有钩子配置文件，走的是 Cordis 插件：
+把 `integrations/dsh-bridge` 放进 dsh 的 profile，在 `cordis.patch.yml` 加两行，重启 dsh。
+
+原理很轻：钩子只做一件事——把事件 JSON 落到 `~/.xiaojimao/workbuddy-events/<Agent>/`，桌宠每 0.8 秒消费一批并删掉。不监听端口、不申请权限、不联网。
 
 只要某个 agent 支持 Claude 风格 hooks（`UserPromptSubmit` / `PreToolUse` / `Notification` / `Stop`），就能接进来，欢迎 PR 补一家。
 

@@ -2,6 +2,16 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.3.0 — 2026-11-22
+
+### 新增
+
+- **DeepSeek Harness 接入**：dsh 没有 Claude 那套钩子配置，但有 Cordis 插件体系。
+  新增 [`integrations/dsh-bridge`](integrations/dsh-bridge/README.md) 桥接插件，监听宿主的
+  `session/event`，把 `turn/start` / `approval/asked` / `turn/end` 写成同构事件，
+  桌宠的三态照样生效（子代理与 aborted 的轮次会被忽略）
+- 设置页的 DeepSeek Harness 一行改为「需装插件」，并在提示里指向 README 的安装步骤
+
 ## 1.2.1 — 2026-11-22
 
 ### 修复
