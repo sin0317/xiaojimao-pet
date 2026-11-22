@@ -6,8 +6,10 @@ const __dirname = dirname(__filename);
 
 export const APP_NAME = "小鸡毛";
 export const STORE_NAME = "pawpal";
-export const RELEASES_API_URL = "https://api.github.com/repos/zebangeth/PawPal/releases/latest";
-export const RELEASES_URL = "https://github.com/zebangeth/PawPal/releases";
+/** HTTP 头只能是 Latin-1，User-Agent 必须用 ASCII 名，不能直接用 APP_NAME */
+export const APP_USER_AGENT = "xiaojimao-pet";
+export const RELEASES_API_URL = "https://api.github.com/repos/sin0317/xiaojimao-pet/releases/latest";
+export const RELEASES_URL = "https://github.com/sin0317/xiaojimao-pet/releases";
 
 export const PET_WINDOW = {
   width: 220,

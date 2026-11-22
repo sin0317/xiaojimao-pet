@@ -2,6 +2,15 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.1.1 — 2026-11-22
+
+### 修复
+
+- 任务牌从窗口左上角移到宠物头顶正上方居中显示，气泡在它上面叠加，不再离宠物很远
+- 「检查更新」报 `Cannot convert argument to a ByteString`：`User-Agent` 里用了中文应用名，
+  HTTP 头只支持 Latin-1，改用 ASCII 的 `xiaojimao-pet/<version>`
+- 更新检查改为查询本仓库 `sin0317/xiaojimao-pet`；还没有正式 Release 时按「已是最新」处理，不再飘红
+
 ## 1.1.0 — 2026-11-22
 
 ### 新增

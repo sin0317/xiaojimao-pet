@@ -277,7 +277,7 @@ export function PetView(): JSX.Element {
 
   return (
     <main
-      className="pet-shell"
+      className={`pet-shell${workBuddy ? " has-task-badge" : ""}`}
       aria-label="PawPal desktop pet"
       onContextMenu={(event) => {
         event.preventDefault();

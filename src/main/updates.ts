@@ -1,7 +1,7 @@
 import { app, net } from "electron";
 import type { UpdateCheckResult } from "../shared/types";
 import { compareVersions } from "../shared/versions";
-import { APP_NAME, RELEASES_API_URL, RELEASES_URL } from "./config";
+import { APP_USER_AGENT, RELEASES_API_URL, RELEASES_URL } from "./config";
 
 type GitHubReleasePayload = {
   tag_name?: unknown;
@@ -41,9 +41,21 @@ export async function checkGitHubReleasesForUpdates(
     const response = await net.fetch(RELEASES_API_URL, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": `${APP_NAME}/${app.getVersion()}`
+        "User-Agent": `${APP_USER_AGENT}/${app.getVersion()}`
       }
     });
+
+    // 仓库还没有正式发布过 Release 时 GitHub 返回 404，这不是错误
+    if (response.status === 404) {
+      return {
+        status: "up-to-date",
+        currentVersion: app.getVersion(),
+        latestVersion: null,
+        releaseUrl: RELEASES_URL,
+        checkedAt: Date.now(),
+        error: null
+      };
+    }
 
     if (!response.ok) {
       throw new Error(`GitHub returned ${response.status}`);

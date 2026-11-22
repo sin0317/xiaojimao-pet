@@ -267,23 +267,29 @@ textarea {
   background: rgba(255, 252, 244, 0.96);
   border: 1px solid rgba(182, 125, 58, 0.28);
   border-radius: 11px;
+  bottom: 132px;
   box-shadow: 0 6px 16px rgba(45, 38, 31, 0.14);
   color: #a86a33;
   cursor: pointer;
   display: flex;
   gap: 6px;
-  left: 6px;
-  max-width: 196px;
-  padding: 5px 8px;
+  left: 50%;
+  max-width: 190px;
+  padding: 5px 9px;
   pointer-events: auto;
   position: absolute;
   text-align: left;
-  top: 6px;
+  transform: translateX(-50%);
   transition:
     border-color 0.2s ease,
     color 0.2s ease,
     background 0.2s ease;
   z-index: 3;
+}
+
+/* 任务牌常驻在宠物头顶正上方，气泡再往上叠一层 */
+.pet-shell.has-task-badge .speech-bubble {
+  bottom: 176px;
 }
 
 .task-badge__dot {
@@ -321,7 +327,7 @@ textarea {
   color: #8d7f6c;
   font-size: 9px;
   line-height: 1.2;
-  max-width: 168px;
+  max-width: 148px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
