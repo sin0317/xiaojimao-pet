@@ -662,6 +662,16 @@ export function SettingsView(): JSX.Element {
   );
   const [wbSwitch, setWbSwitch] = useState<WbSwitchSnapshot | null>(null);
   const [wbBusy, setWbBusy] = useState(false);
+  const [redetecting, setRedetecting] = useState(false);
+
+  async function redetectAgents(): Promise<void> {
+    setRedetecting(true);
+    try {
+      await window.pawpal.redetectAgents();
+    } finally {
+      setRedetecting(false);
+    }
+  }
 
   useEffect(() => {
     void window.pawpal.getWbSwitchStatus().then(setWbSwitch);
@@ -1337,6 +1347,14 @@ export function SettingsView(): JSX.Element {
                     onClick={window.pawpal.showWorkBuddyStatus}
                   >
                     {labels.workBuddyShowOnPet}
+                  </button>
+                  <button
+                    type="button"
+                    className="pref-button"
+                    disabled={redetecting}
+                    onClick={() => void redetectAgents()}
+                  >
+                    {redetecting ? labels.workBuddyRedetecting : labels.workBuddyRedetect}
                   </button>
                 </div>
               }

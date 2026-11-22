@@ -75,6 +75,7 @@ const api = {
   clearQoderLink: (): Promise<WorkBuddyLinkStatus> =>
     ipcRenderer.invoke("qoder:link-clear"),
   syncWbSwitch: (): Promise<WbSwitchSnapshot> => ipcRenderer.invoke("wbswitch:sync"),
+  redetectAgents: (): Promise<AgentIntegration[]> => ipcRenderer.invoke("agents:redetect"),
   getWbSwitchStatus: (): Promise<WbSwitchSnapshot | null> =>
     ipcRenderer.invoke("wbswitch:status"),
   writeClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke("clipboard:write", text),

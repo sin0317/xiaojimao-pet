@@ -2213,6 +2213,11 @@ function registerIpc(): void {
   });
   ipcMain.handle("wbswitch:sync", () => syncWbSwitch());
   ipcMain.handle("wbswitch:status", () => store.get("wbSwitchAccounts") ?? null);
+  // 手动重新检测：装了新插件/改了钩子配置后不用重启桌宠
+  ipcMain.handle("agents:redetect", async () => {
+    await refreshWorkBuddyIntegration();
+    return workBuddyIntegrations;
+  });
   ipcMain.handle("clipboard:write", (_event, text: unknown) => {
     clipboard.writeText(String(text ?? ""));
     return true;
