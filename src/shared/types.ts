@@ -1,5 +1,14 @@
 export type Language = "zh-CN" | "en";
 
+import type { WorkBuddyIntegration, WorkBuddyStatus } from "./workbuddy";
+
+export type {
+  WorkBuddyIntegration,
+  WorkBuddyPhase,
+  WorkBuddySession,
+  WorkBuddyStatus
+} from "./workbuddy";
+
 export type BuiltInPetAppearanceId = "lovartPuppy" | "lineDog" | "xiaoJiMao";
 
 export type PetAppearanceId = BuiltInPetAppearanceId | "custom";
@@ -83,6 +92,8 @@ export type Settings = {
   hideEarnings: boolean;
   workCheckoutDate: string | null;
   workCheckoutAt: number | null;
+  workBuddyEnabled: boolean;
+  workBuddyNotifyEnabled: boolean;
 };
 
 export type TodayStats = {
@@ -124,6 +135,8 @@ export type AppSnapshot = {
   blockingMode: BlockingMode;
   focusActive: boolean;
   dogVisible: boolean;
+  workBuddy: WorkBuddyStatus;
+  workBuddyIntegration: WorkBuddyIntegration;
 };
 
 export type AppInfo = {

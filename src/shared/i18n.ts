@@ -115,6 +115,16 @@ export const I18N = {
         "打卡完成！今天到此为止～",
         "收工啦，快回家",
         "下班打卡成功，明天见～"
+      ],
+      workBuddyNeedsInput: [
+        "WorkBuddy 在等你选一下～",
+        "有个任务卡住了，等你点一下",
+        "需要你做决定了，我在这儿等你"
+      ],
+      workBuddyDone: [
+        "任务做完啦！摇尾巴～",
+        "搞定一个，休息一下？",
+        "完成！我帮你记着"
       ]
     },
     actions: {
@@ -125,7 +135,8 @@ export const I18N = {
       hydrationDone: "我喝水了",
       hydrationSnooze: "稍后提醒",
       focusBack: "回去工作",
-      focusEnd: "结束专注"
+      focusEnd: "结束专注",
+      workBuddyDismiss: "知道啦"
     },
     menu: {
       showDog: "显示宠物",
@@ -255,6 +266,28 @@ export const I18N = {
       workStateLunch: "午休",
       workStateAfter: "已下班",
       workStateRest: "休息日",
+      workBuddy: "任务",
+      enableWorkBuddy: "WorkBuddy 任务状态",
+      enableWorkBuddyHelp:
+        "接入 WorkBuddy 钩子后，桌宠会显示「任务中 / 等你选 / 已完成」三种状态，抬头看一眼就知道进度。",
+      workBuddyNotify: "状态变化时提醒",
+      workBuddyNotifyHelp: "需要你选择或任务完成时，弹出气泡并发送系统通知。",
+      workBuddyIntegration: "接入状态",
+      workBuddyInstalled: "已接入",
+      workBuddyNotInstalled: "未接入",
+      workBuddyInstall: "接入 WorkBuddy",
+      workBuddyRemove: "移除接入",
+      workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
+      workBuddyEventDir: "事件目录",
+      workBuddyOpenDir: "打开目录",
+      workBuddyShowOnPet: "在桌宠查看",
+      workBuddyCurrent: "当前状态",
+      workBuddyPhaseRunning: "任务中",
+      workBuddyPhaseNeedsInput: "等你选",
+      workBuddyPhaseDone: "已完成",
+      workBuddyPhaseIdle: "空闲",
+      workBuddyEmptyHint: "还没收到 WorkBuddy 的任务事件。先在设置里点「接入 WorkBuddy」，再重启 WorkBuddy。",
+      workBuddyTaskCount: (count: number) => `${count} 个任务`,
       focus: "专注",
       focusDuration: "专注时长",
       enableDistractionDetection: "开启分心检测",
@@ -425,6 +458,16 @@ export const I18N = {
         "Checked out! That's it for today~",
         "All done — head home",
         "Checkout done. See you tomorrow~"
+      ],
+      workBuddyNeedsInput: [
+        "WorkBuddy is waiting on you~",
+        "A task is stuck until you pick something",
+        "You're needed for a decision — I'll wait here"
+      ],
+      workBuddyDone: [
+        "Task finished! *tail wag*",
+        "One down — take a breather?",
+        "Done! I'm keeping track"
       ]
     },
     actions: {
@@ -435,7 +478,8 @@ export const I18N = {
       hydrationDone: "I drank water",
       hydrationSnooze: "Remind later",
       focusBack: "Back to work",
-      focusEnd: "End Focus"
+      focusEnd: "End Focus",
+      workBuddyDismiss: "Got it"
     },
     menu: {
       showDog: "Show Pet",
@@ -569,6 +613,31 @@ export const I18N = {
       workStateLunch: "Lunch",
       workStateAfter: "Off work",
       workStateRest: "Day off",
+      workBuddy: "Tasks",
+      enableWorkBuddy: "WorkBuddy Task Status",
+      enableWorkBuddyHelp:
+        "After connecting WorkBuddy hooks, the pet shows working / needs-you / done so one glance tells you the progress.",
+      workBuddyNotify: "Notify on Status Change",
+      workBuddyNotifyHelp:
+        "Show a bubble and a system notification when a choice is needed or a task finishes.",
+      workBuddyIntegration: "Integration",
+      workBuddyInstalled: "Connected",
+      workBuddyNotInstalled: "Not connected",
+      workBuddyInstall: "Connect WorkBuddy",
+      workBuddyRemove: "Disconnect",
+      workBuddyRestartHint:
+        "Restart WorkBuddy to take effect. The previous config is backed up.",
+      workBuddyEventDir: "Event Folder",
+      workBuddyOpenDir: "Open Folder",
+      workBuddyShowOnPet: "Show on Pet",
+      workBuddyCurrent: "Current",
+      workBuddyPhaseRunning: "Working",
+      workBuddyPhaseNeedsInput: "Needs you",
+      workBuddyPhaseDone: "Done",
+      workBuddyPhaseIdle: "Idle",
+      workBuddyEmptyHint:
+        "No WorkBuddy events yet. Click “Connect WorkBuddy” in settings, then restart WorkBuddy.",
+      workBuddyTaskCount: (count: number) => `${count} tasks`,
       focus: "Focus",
       focusDuration: "Focus Duration",
       enableDistractionDetection: "Enable Distraction Detection",

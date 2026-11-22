@@ -7,7 +7,8 @@ import type {
   Settings,
   SpeechBubble,
   TodayStats,
-  UpdateCheckResult
+  UpdateCheckResult,
+  WorkBuddyIntegration
 } from "../shared/types";
 
 type Unsubscribe = () => void;
@@ -46,6 +47,12 @@ const api = {
   stopFocus: (): void => ipcRenderer.send("focus:stop"),
   resetToday: (): void => ipcRenderer.send("stats:reset-today"),
   checkoutWork: (): void => ipcRenderer.send("work:checkout"),
+  installWorkBuddyHooks: (): Promise<WorkBuddyIntegration> =>
+    ipcRenderer.invoke("workbuddy:install-hooks"),
+  removeWorkBuddyHooks: (): Promise<WorkBuddyIntegration> =>
+    ipcRenderer.invoke("workbuddy:remove-hooks"),
+  openWorkBuddyEventDir: (): void => ipcRenderer.send("workbuddy:open-event-dir"),
+  showWorkBuddyStatus: (): void => ipcRenderer.send("workbuddy:show-status"),
   onPetState: (callback: (state: PetState) => void): Unsubscribe =>
     onChannel("pet:set-state", callback),
   onShowBubble: (callback: (bubble: SpeechBubble) => void): Unsubscribe =>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_SETTINGS } from "../../shared/constants";
+import { EMPTY_WORKBUDDY_STATUS } from "../../shared/workbuddy";
 import type { AppSnapshot, TodayStats } from "../../shared/types";
 
 const initialStats: TodayStats = {
@@ -45,7 +46,17 @@ export function useSnapshot(): AppSnapshot {
     petFacing: "right",
     blockingMode: null,
     focusActive: false,
-    dogVisible: true
+    dogVisible: true,
+    workBuddy: EMPTY_WORKBUDDY_STATUS,
+    workBuddyIntegration: {
+      settingsPath: "",
+      scriptPath: "",
+      eventDir: "",
+      installed: false,
+      workBuddyDetected: false,
+      error: null,
+      checkedAt: 0
+    }
   });
 
   useEffect(() => {

@@ -133,6 +133,7 @@ textarea {
   line-height: 1.35;
   margin: 0;
   text-align: center;
+  white-space: pre-line;
 }
 
 .bubble-actions {
@@ -235,6 +236,119 @@ textarea {
   font-size: 9.5px;
   font-style: normal;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- WorkBuddy 任务状态 ---- */
+
+.pet-stage {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  position: relative;
+  transition: filter 0.3s ease;
+}
+
+.pet-stage.task-running {
+  filter: drop-shadow(0 0 9px rgba(182, 125, 58, 0.3));
+}
+
+.pet-stage.task-needsInput {
+  animation: pet-nudge 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(194, 84, 47, 0.45));
+}
+
+.pet-stage.task-done {
+  animation: pet-celebrate 1.2s ease-in-out 2;
+  filter: drop-shadow(0 0 12px rgba(47, 125, 92, 0.35));
+}
+
+.task-badge {
+  align-items: center;
+  background: rgba(255, 252, 244, 0.96);
+  border: 1px solid rgba(182, 125, 58, 0.28);
+  border-radius: 11px;
+  box-shadow: 0 6px 16px rgba(45, 38, 31, 0.14);
+  color: #a86a33;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  left: 6px;
+  max-width: 196px;
+  padding: 5px 8px;
+  pointer-events: auto;
+  position: absolute;
+  text-align: left;
+  top: 6px;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease;
+  z-index: 3;
+}
+
+.task-badge__dot {
+  background: #b67d3a;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 7px;
+  width: 7px;
+}
+
+.task-badge__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.task-badge__label {
+  align-items: baseline;
+  display: flex;
+  font-size: 10.5px;
+  font-weight: 700;
+  gap: 4px;
+  line-height: 1.25;
+}
+
+.task-badge__label em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+.task-badge__project {
+  color: #8d7f6c;
+  font-size: 9px;
+  line-height: 1.2;
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-badge--running .task-badge__dot {
+  animation: task-dot 1.5s ease-in-out infinite;
+}
+
+.task-badge--needsInput {
+  background: rgba(255, 249, 243, 0.98);
+  border-color: rgba(194, 84, 47, 0.42);
+  color: #b8482a;
+}
+
+.task-badge--needsInput .task-badge__dot {
+  animation: task-dot 0.9s ease-in-out infinite;
+  background: #c2542f;
+}
+
+.task-badge--done {
+  border-color: rgba(47, 125, 92, 0.3);
+  color: #2f7d5c;
+}
+
+.task-badge--done .task-badge__dot {
+  background: #2f7d5c;
 }
 
 .prefs {
@@ -683,6 +797,46 @@ textarea {
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+}
+
+.pref-status {
+  align-items: center;
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 650;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pref-status::before {
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  width: 7px;
+}
+
+.pref-status.is-on {
+  color: #2f7d5c;
+}
+
+.pref-status.is-on::before {
+  background: #2f7d5c;
+}
+
+.pref-status.is-off {
+  color: #a85a35;
+}
+
+.pref-status.is-off::before {
+  background: #c2542f;
+  opacity: 0.65;
+}
+
+.pref-status-note {
+  color: var(--warn, #a85a35);
+  font-size: 11.5px;
+  line-height: 1.4;
+  margin: 2px 0 0;
 }
 
 .pref-chips {
@@ -1377,5 +1531,44 @@ textarea {
   }
   60% {
     transform: translateX(4px) scale(1.02);
+  }
+}
+
+@keyframes task-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes pet-nudge {
+  0%,
+  86%,
+  100% {
+    transform: translateY(0);
+  }
+  91% {
+    transform: translateY(-4px);
+  }
+  96% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes pet-celebrate {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-7px);
+  }
+  70% {
+    transform: translateY(-2px);
   }
 }

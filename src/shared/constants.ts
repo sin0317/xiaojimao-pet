@@ -69,7 +69,9 @@ export const DEFAULT_SETTINGS: Settings = {
   customDaily: null,
   hideEarnings: false,
   workCheckoutDate: null,
-  workCheckoutAt: null
+  workCheckoutAt: null,
+  workBuddyEnabled: true,
+  workBuddyNotifyEnabled: true
 };
 
 export function todayKey(date = new Date()): string {

@@ -1,6 +1,6 @@
 import { basename, extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import {
   app,
   BrowserWindow,
@@ -23,6 +23,19 @@ import {
 import { i18n, pick } from "../shared/i18n";
 import { PET_STATE_ORDER } from "../shared/petAppearances";
 import { computeWork, dateKeyOf, formatDuration } from "../shared/workClock";
+import {
+  applyWorkBuddyEvents,
+  EMPTY_WORKBUDDY_STATUS,
+  primaryWorkBuddySession,
+  summarizeWorkBuddy
+} from "../shared/workbuddy";
+import type {
+  WorkBuddyHookPayload,
+  WorkBuddyIntegration,
+  WorkBuddyPhase,
+  WorkBuddySession,
+  WorkBuddyStatus
+} from "../shared/workbuddy";
 import type {
   AppSnapshot,
   BlockingMode,
@@ -77,6 +90,12 @@ import {
   createCheckingUpdateCheck,
   createInitialUpdateCheck
 } from "./updates";
+import {
+  detectWorkBuddyIntegration,
+  installWorkBuddyHooks,
+  resolveWorkBuddyEventDir,
+  uninstallWorkBuddyHooks
+} from "./workbuddyHooks";
 
 type StoreSchema = {
   settings: Settings;
@@ -143,6 +162,20 @@ let distractionStatus: DistractionStatus = {
   error: null
 };
 let updateCheck: UpdateCheckResult = createInitialUpdateCheck();
+let workBuddySessions: Record<string, WorkBuddySession> = {};
+let workBuddyStatus: WorkBuddyStatus = EMPTY_WORKBUDDY_STATUS;
+let workBuddyIntegration: WorkBuddyIntegration = {
+  settingsPath: "",
+  scriptPath: "",
+  eventDir: "",
+  installed: false,
+  workBuddyDetected: false,
+  error: null,
+  checkedAt: 0
+};
+let workBuddyTimer: NodeJS.Timeout | null = null;
+let workBuddyIngesting = false;
+let petRendererReady = false;
 
 function setPetMouseInteractive(interactive: boolean): void {
   if (!petWindow || petWindow.isDestroyed() || petMouseInteractive === interactive) return;
@@ -167,6 +200,7 @@ function setSettings(next: Settings): void {
   settingsWindow?.setTitle(`${APP_NAME} ${text().menu.settings}`);
   scheduleReminderTimers();
   scheduleDistractionDetection();
+  scheduleWorkBuddyBridge();
   if (fullscreenDetectionWasEnabled !== normalized.hideOnFullscreenEnabled) {
     configureFullscreenDetection();
   }
@@ -257,7 +291,9 @@ function snapshot(): AppSnapshot {
     petFacing,
     blockingMode,
     dogVisible: Boolean(petWindow?.isVisible()),
-    focusActive
+    focusActive,
+    workBuddy: workBuddyStatus,
+    workBuddyIntegration
   };
 }
 
@@ -449,6 +485,7 @@ function createPetWindow(): void {
     });
   }
   petWindow.once("ready-to-show", () => {
+    petRendererReady = true;
     if (!petHiddenByFullscreen && !isPetHiddenByUser()) petWindow?.showInactive();
     petWindow?.setSkipTaskbar(true);
     updateTrayMenu();
@@ -466,6 +503,7 @@ function createPetWindow(): void {
   });
   petWindow.on("closed", () => {
     stopPetDrag();
+    petRendererReady = false;
     petWindow = null;
     updateTrayMenu();
     publishSnapshot();
@@ -828,11 +866,7 @@ function emitWorkReminder(id: string, message: string, autoDismissMs = 15000): v
   ensurePetWindowVisible();
   setPetState("happy");
   showBubble({ id, message, autoDismissMs });
-  if (Notification.isSupported()) {
-    const notification = new Notification({ title: APP_NAME, body: message, silent: false });
-    notification.on("click", () => ensurePetWindowVisible());
-    notification.show();
-  }
+  showSystemNotification(message);
   setTimeout(() => {
     if (!blockingMode) setPetState(focusActive ? "focusGuard" : "idle");
   }, autoDismissMs + 200);
@@ -910,6 +944,184 @@ function scheduleReminderTimers(): void {
   scheduleBreakReminderTimer();
   scheduleHydrationReminderTimer();
   scheduleWorkReminders();
+}
+
+/* ------------------------------------------------------------------ *
+ * WorkBuddy 任务状态桥
+ * 钩子把对话事件写进 ~/.xiaojimao/workbuddy-events，这里折算成三态。
+ * ------------------------------------------------------------------ */
+
+function workBuddyPhaseLabel(phase: WorkBuddyPhase | "idle"): string {
+  const labels = text().settings;
+  if (phase === "running") return labels.workBuddyPhaseRunning;
+  if (phase === "needsInput") return labels.workBuddyPhaseNeedsInput;
+  if (phase === "done") return labels.workBuddyPhaseDone;
+  return labels.workBuddyPhaseIdle;
+}
+
+function showSystemNotification(message: string): void {
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({ title: APP_NAME, body: message, silent: false });
+  notification.on("click", () => ensurePetWindowVisible());
+  notification.show();
+}
+
+function reactToWorkBuddyPhase(next: WorkBuddyStatus): void {
+  const settings = getSettings();
+  if (!settings.workBuddyEnabled) return;
+  if (blockingMode) return;
+
+  const labels = text();
+  const primary = primaryWorkBuddySession(next);
+  const projectText = primary?.project ? `（${primary.project}）` : "";
+
+  if (next.phase === "needsInput") {
+    ensurePetWindowVisible();
+    if (!focusActive) setPetState("focusAlert");
+    if (!settings.workBuddyNotifyEnabled || !petRendererReady) return;
+    const message = pick(labels.bubble.workBuddyNeedsInput);
+    showBubble({
+      id: "workbuddy-needs-input",
+      message: `${message}${projectText}`,
+      actions: [
+        { id: "workbuddy:dismiss", label: labels.actions.workBuddyDismiss, kind: "primary" }
+      ],
+      autoDismissMs: 20000
+    });
+    showSystemNotification(`${message}${projectText}`);
+    return;
+  }
+
+  if (next.phase === "done") {
+    if (!focusActive) setPetState("happy");
+    if (!settings.workBuddyNotifyEnabled || !petRendererReady) return;
+    const message = `${pick(labels.bubble.workBuddyDone)}${projectText}`;
+    showBubble({ id: "workbuddy-done", message, autoDismissMs: 3200 });
+    showSystemNotification(message);
+    setTimeout(() => {
+      if (blockingMode) return;
+      hideBubble();
+      setPetState(focusActive ? "focusGuard" : "idle");
+    }, 3300);
+    return;
+  }
+
+  if (next.phase === "running") {
+    if (!focusActive && petState !== "breakRunning") setPetState("focusGuard");
+    return;
+  }
+
+  if (!focusActive && (petState === "focusGuard" || petState === "focusAlert")) {
+    setPetState("idle");
+  }
+}
+
+function applyWorkBuddyStatus(next: WorkBuddyStatus): void {
+  const previous = workBuddyStatus;
+  const changed = JSON.stringify(previous) !== JSON.stringify(next);
+  workBuddyStatus = next;
+  if (previous.phase !== next.phase) reactToWorkBuddyPhase(next);
+  if (changed) publishSnapshot();
+}
+
+async function ingestWorkBuddyEvents(): Promise<void> {
+  if (workBuddyIngesting || !getSettings().workBuddyEnabled) return;
+  workBuddyIngesting = true;
+
+  try {
+    const eventDir = resolveWorkBuddyEventDir();
+    let names: string[] = [];
+    try {
+      names = (await readdir(eventDir)).filter((name) => name.endsWith(".json"));
+    } catch {
+      names = [];
+    }
+
+    const now = Date.now();
+    const events: Array<{ payload: WorkBuddyHookPayload; at: number }> = [];
+
+    for (const name of names.slice(0, 400)) {
+      const filePath = join(eventDir, name);
+      let mtimeMs = 0;
+      try {
+        mtimeMs = (await stat(filePath)).mtimeMs;
+      } catch {
+        continue;
+      }
+      // 刚落的文件可能还没写完，留到下一轮
+      if (now - mtimeMs < 150) continue;
+
+      try {
+        const raw = await readFile(filePath, "utf8");
+        const payload = JSON.parse(raw) as unknown;
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+          events.push({ payload: payload as WorkBuddyHookPayload, at: mtimeMs });
+        }
+      } catch {
+        // 坏文件直接清掉，避免反复重试
+      }
+      await unlink(filePath).catch(() => undefined);
+    }
+
+    if (events.length) {
+      workBuddySessions = applyWorkBuddyEvents(workBuddySessions, events);
+    }
+    applyWorkBuddyStatus(summarizeWorkBuddy(workBuddySessions, Date.now()));
+  } finally {
+    workBuddyIngesting = false;
+  }
+}
+
+function scheduleWorkBuddyBridge(): void {
+  if (workBuddyTimer) {
+    clearInterval(workBuddyTimer);
+    workBuddyTimer = null;
+  }
+
+  if (!getSettings().workBuddyEnabled) {
+    workBuddySessions = {};
+    applyWorkBuddyStatus(EMPTY_WORKBUDDY_STATUS);
+    return;
+  }
+
+  void mkdir(resolveWorkBuddyEventDir(), { recursive: true }).catch(() => undefined);
+  // 等桌宠窗口挂好监听再消费历史事件，否则气泡会打在空气里
+  setTimeout(() => void ingestWorkBuddyEvents(), 900);
+  workBuddyTimer = setInterval(() => void ingestWorkBuddyEvents(), 800);
+}
+
+async function refreshWorkBuddyIntegration(): Promise<void> {
+  workBuddyIntegration = await detectWorkBuddyIntegration();
+  publishSnapshot();
+}
+
+function showWorkBuddyDetails(): void {
+  ensurePetWindowVisible();
+  const labels = text();
+
+  if (!workBuddyStatus.sessions.length) {
+    showBubble({
+      id: "workbuddy-empty",
+      message: labels.settings.workBuddyEmptyHint,
+      autoDismissMs: 6000
+    });
+    return;
+  }
+
+  const lines = workBuddyStatus.sessions.slice(0, 3).map((session) => {
+    const name = session.project || "WorkBuddy";
+    const title = session.title ? ` · ${session.title}` : "";
+    return `· ${name}｜${workBuddyPhaseLabel(session.phase)}${title}`;
+  });
+
+  showBubble({ id: "workbuddy-details", message: lines.join("\n"), autoDismissMs: 15000 });
+}
+
+function openWorkBuddyEventDir(): void {
+  const eventDir = resolveWorkBuddyEventDir();
+  void mkdir(eventDir, { recursive: true })
+    .then(() => shell.openPath(eventDir))
+    .catch(() => undefined);
 }
 
 function showOverdueReminder(): boolean {
@@ -1214,6 +1426,15 @@ function triggerDemo(trigger: DemoTrigger): void {
 }
 
 function handleBubbleAction(actionId: string): void {
+  if (actionId === "workbuddy:dismiss") {
+    hideBubble();
+    if (!blockingMode) {
+      setPetState(
+        focusActive ? "focusGuard" : workBuddyStatus.phase === "needsInput" ? "focusAlert" : "idle"
+      );
+    }
+    return;
+  }
   if (actionId === "app:open-release-notes") {
     hideBubble();
     setPetState(focusActive ? "focusGuard" : "idle");
@@ -1313,6 +1534,18 @@ function registerIpc(): void {
   ipcMain.on("focus:start", startFocusMode);
   ipcMain.on("focus:stop", () => stopFocusMode(false));
   ipcMain.on("stats:reset-today", resetTodayStats);
+  ipcMain.handle("workbuddy:install-hooks", async () => {
+    workBuddyIntegration = await installWorkBuddyHooks();
+    publishSnapshot();
+    return workBuddyIntegration;
+  });
+  ipcMain.handle("workbuddy:remove-hooks", async () => {
+    await uninstallWorkBuddyHooks();
+    await refreshWorkBuddyIntegration();
+    return workBuddyIntegration;
+  });
+  ipcMain.on("workbuddy:open-event-dir", openWorkBuddyEventDir);
+  ipcMain.on("workbuddy:show-status", showWorkBuddyDetails);
   ipcMain.on("work:checkout", () => {
     const settings = getSettings();
     const now = new Date();
@@ -1375,6 +1608,8 @@ app.whenReady().then(() => {
   scheduleReminderTimers();
   scheduleDistractionDetection();
   configureFullscreenDetection();
+  scheduleWorkBuddyBridge();
+  void refreshWorkBuddyIntegration();
   if (IS_DEV) {
     createSettingsWindow();
   }
@@ -1402,7 +1637,8 @@ app.on("before-quit", () => {
     displayChangeTimer,
     bubbleTimer,
     dragTimer,
-    dragSafetyTimer
+    dragSafetyTimer,
+    workBuddyTimer
   ]) {
     if (timer) clearTimeout(timer);
   }

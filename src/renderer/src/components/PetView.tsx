@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX, PointerEvent } from "react";
 import { i18n, resolveLanguage } from "../../../shared/i18n";
 import type { PetState, SpeechBubble } from "../../../shared/types";
+import type { WorkBuddyPhase, WorkBuddyStatus } from "../../../shared/workbuddy";
 import { computeWork, formatCountdown, type WorkSnapshot } from "../../../shared/workClock";
 import { getPetAsset, getPetAssetVariantCount } from "../assets";
 import { useNow, useSnapshot } from "../hooks";
@@ -19,6 +20,7 @@ const CONTINUOUS_ASSET_ROTATION_MS = 15 * 60 * 1000;
 const DRAG_START_DISTANCE_PX = 10;
 const PET_BUTTON_SELECTOR = ".pet-button";
 const BUBBLE_INTERACTIVE_SELECTOR = ".speech-bubble";
+const TASK_BADGE_SELECTOR = ".task-badge";
 
 function randomVariant(count: number, previous?: number): number {
   if (count <= 1) return 0;
@@ -65,6 +67,44 @@ function workBadgeView(work: WorkSnapshot, nowMs: number, labels: WorkClockCopy)
   }
 }
 
+type WorkBuddyBadge = {
+  phase: WorkBuddyPhase;
+  label: string;
+  project: string;
+  title: string;
+  count: number;
+};
+
+function workBuddyBadgeView(
+  status: WorkBuddyStatus,
+  labels: WorkClockCopy
+): WorkBuddyBadge | null {
+  if (status.phase === "idle") return null;
+
+  const label =
+    status.phase === "running"
+      ? labels.workBuddyPhaseRunning
+      : status.phase === "needsInput"
+        ? labels.workBuddyPhaseNeedsInput
+        : labels.workBuddyPhaseDone;
+  const primary =
+    status.sessions.find((session) => session.phase === status.phase) ?? status.sessions[0];
+  const count =
+    status.phase === "needsInput"
+      ? status.needsInputCount
+      : status.phase === "running"
+        ? status.runningCount
+        : 0;
+
+  return {
+    phase: status.phase,
+    label,
+    project: primary?.project ?? "",
+    title: primary?.title ?? "",
+    count
+  };
+}
+
 export function PetView(): JSX.Element {
   const snapshot = useSnapshot();
   const now = useNow(1000);
@@ -81,6 +121,9 @@ export function PetView(): JSX.Element {
     ? computeWork(snapshot.settings, new Date(now))
     : null;
   const workClock = work ? workBadgeView(work, now, labels) : null;
+  const workBuddy = snapshot.settings.workBuddyEnabled
+    ? workBuddyBadgeView(snapshot.workBuddy, labels)
+    : null;
 
   useEffect(() => {
     const offBubble = window.pawpal.onShowBubble(setBubble);
@@ -138,8 +181,9 @@ export function PetView(): JSX.Element {
     const isOnPet = petButton ? pointInElementHitbox(point, petButton) : false;
     const isOnBubble =
       bubbleVisibleRef.current && Boolean(target.closest(BUBBLE_INTERACTIVE_SELECTOR));
+    const isOnTaskBadge = Boolean(target.closest(TASK_BADGE_SELECTOR));
 
-    setMouseInteractive(isOnPet || isOnBubble);
+    setMouseInteractive(isOnPet || isOnBubble || isOnTaskBadge);
   }
 
   useEffect(() => {
@@ -281,19 +325,41 @@ export function PetView(): JSX.Element {
         </div>
       ) : null}
 
-      <button
-        className={`pet-button state-${state} ${facingClass} ${
-          asset.isPlaceholder ? "placeholder-asset" : ""
-        }`}
-        onPointerCancel={cancelPointer}
-        onPointerDown={startPointer}
-        onLostPointerCapture={() => finishPointerDrag(false)}
-        onPointerMove={movePointer}
-        onPointerUp={stopPointer}
-        type="button"
-      >
-        <img draggable={false} src={asset.src} alt={altText} />
-      </button>
+      {workBuddy ? (
+        <button
+          className={`task-badge task-badge--${workBuddy.phase}`}
+          onClick={() => window.pawpal.showWorkBuddyStatus()}
+          title={workBuddy.title || workBuddy.label}
+          type="button"
+        >
+          <span className="task-badge__dot" aria-hidden="true" />
+          <span className="task-badge__text">
+            <span className="task-badge__label">
+              {workBuddy.label}
+              {workBuddy.count > 1 ? <em>×{workBuddy.count}</em> : null}
+            </span>
+            {workBuddy.project ? (
+              <span className="task-badge__project">{workBuddy.project}</span>
+            ) : null}
+          </span>
+        </button>
+      ) : null}
+
+      <div className={`pet-stage${workBuddy ? ` task-${workBuddy.phase}` : ""}`}>
+        <button
+          className={`pet-button state-${state} ${facingClass} ${
+            asset.isPlaceholder ? "placeholder-asset" : ""
+          }`}
+          onPointerCancel={cancelPointer}
+          onPointerDown={startPointer}
+          onLostPointerCapture={() => finishPointerDrag(false)}
+          onPointerMove={movePointer}
+          onPointerUp={stopPointer}
+          type="button"
+        >
+          <img draggable={false} src={asset.src} alt={altText} />
+        </button>
+      </div>
     </main>
   );
 }

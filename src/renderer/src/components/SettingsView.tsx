@@ -448,6 +448,8 @@ export function SettingsView(): JSX.Element {
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [customEditorOpen, setCustomEditorOpen] = useState(settings.petAppearanceId === "custom");
+  const [workBuddyBusy, setWorkBuddyBusy] = useState(false);
+  const [workBuddyError, setWorkBuddyError] = useState<string | null>(null);
   const now = useNow();
   const savedSettingsKey = JSON.stringify(settings);
   const language = resolveLanguage(draft.language);
@@ -488,6 +490,36 @@ export function SettingsView(): JSX.Element {
 
   async function checkForUpdates(): Promise<void> {
     await window.pawpal.checkForUpdates();
+  }
+
+  async function connectWorkBuddy(): Promise<void> {
+    setWorkBuddyBusy(true);
+    setWorkBuddyError(null);
+    try {
+      const result = await window.pawpal.installWorkBuddyHooks();
+      setWorkBuddyError(result.error);
+    } finally {
+      setWorkBuddyBusy(false);
+    }
+  }
+
+  async function disconnectWorkBuddy(): Promise<void> {
+    setWorkBuddyBusy(true);
+    setWorkBuddyError(null);
+    try {
+      const result = await window.pawpal.removeWorkBuddyHooks();
+      setWorkBuddyError(result.error);
+    } finally {
+      setWorkBuddyBusy(false);
+    }
+  }
+
+  function workBuddyPhaseText(): string {
+    const phase = snapshot.workBuddy.phase;
+    if (phase === "running") return labels.workBuddyPhaseRunning;
+    if (phase === "needsInput") return labels.workBuddyPhaseNeedsInput;
+    if (phase === "done") return labels.workBuddyPhaseDone;
+    return labels.workBuddyPhaseIdle;
   }
 
   async function uploadCustomPetAsset(state: PetState): Promise<void> {
@@ -864,6 +896,106 @@ export function SettingsView(): JSX.Element {
             </button>
           }
         />
+      </section>
+
+      <section className="prefs__group">
+        <h2 className="prefs__group-title">{labels.workBuddy}</h2>
+        <Row
+          label={labels.enableWorkBuddy}
+          hint={labels.enableWorkBuddyHelp}
+          control={
+            <ToggleControl
+              checked={draft.workBuddyEnabled}
+              onChange={(workBuddyEnabled) => updateDraft({ workBuddyEnabled })}
+              ariaLabel={labels.enableWorkBuddy}
+            />
+          }
+        />
+        {draft.workBuddyEnabled ? (
+          <>
+            <Row
+              label={labels.workBuddyNotify}
+              hint={labels.workBuddyNotifyHelp}
+              control={
+                <ToggleControl
+                  checked={draft.workBuddyNotifyEnabled}
+                  onChange={(workBuddyNotifyEnabled) => updateDraft({ workBuddyNotifyEnabled })}
+                  ariaLabel={labels.workBuddyNotify}
+                />
+              }
+            />
+            <Row
+              label={labels.workBuddyIntegration}
+              hint={workBuddyError ?? labels.workBuddyRestartHint}
+              control={
+                <div className="pref-button-group">
+                  <span
+                    className={`pref-status ${
+                      snapshot.workBuddyIntegration.installed ? "is-on" : "is-off"
+                    }`}
+                  >
+                    {snapshot.workBuddyIntegration.installed
+                      ? labels.workBuddyInstalled
+                      : labels.workBuddyNotInstalled}
+                  </span>
+                  {snapshot.workBuddyIntegration.installed ? (
+                    <button
+                      type="button"
+                      className="pref-button"
+                      disabled={workBuddyBusy}
+                      onClick={() => void disconnectWorkBuddy()}
+                    >
+                      {labels.workBuddyRemove}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pref-button is-primary"
+                      disabled={workBuddyBusy}
+                      onClick={() => void connectWorkBuddy()}
+                    >
+                      {labels.workBuddyInstall}
+                    </button>
+                  )}
+                </div>
+              }
+            />
+            <Row
+              label={labels.workBuddyCurrent}
+              control={
+                <span className="pref-static-value">
+                  {workBuddyPhaseText()}
+                  {snapshot.workBuddy.sessions[0]?.project
+                    ? ` · ${snapshot.workBuddy.sessions[0].project}`
+                    : ""}
+                </span>
+              }
+            />
+            <Row
+              label={labels.workBuddyEventDir}
+              hint={snapshot.workBuddyIntegration.eventDir || labels.none}
+              control={
+                <div className="pref-button-group">
+                  <button
+                    type="button"
+                    className="pref-button"
+                    onClick={window.pawpal.openWorkBuddyEventDir}
+                  >
+                    {labels.workBuddyOpenDir}
+                  </button>
+                  <button
+                    type="button"
+                    className="pref-button"
+                    onClick={window.pawpal.showWorkBuddyStatus}
+                  >
+                    {labels.workBuddyShowOnPet}
+                  </button>
+                </div>
+              }
+            />
+            {workBuddyError ? <p className="pref-status-note">{workBuddyError}</p> : null}
+          </>
+        ) : null}
       </section>
 
       <section className="prefs__group">

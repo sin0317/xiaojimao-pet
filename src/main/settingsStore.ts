@@ -33,7 +33,9 @@ export function normalizeSettings(stored: Partial<Settings> = {}): Settings {
       stored.breakRunDurationSeconds,
       DEFAULT_SETTINGS.breakRunDurationSeconds,
       10
-    )
+    ),
+    workBuddyEnabled: stored.workBuddyEnabled !== false,
+    workBuddyNotifyEnabled: stored.workBuddyNotifyEnabled !== false
   };
 }
 
