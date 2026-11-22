@@ -18,7 +18,10 @@
 | 提醒调度 | `src/main/main.ts` 新增上班 / 下班 / 整点 / 加班四类提醒，系统通知 + 宠物气泡 |
 | 设置页 | 新增「上下班」分组：上下班时间、午休、工作日、提醒开关、月薪与计薪方式、打卡下班 |
 | 桌面徽标 | 宠物窗口右下角常驻显示距下班倒计时与今日已赚 |
+| WorkBuddy 任务状态 | 接入 WorkBuddy 钩子，桌宠顶部显示「任务中 / 等你选 / 已完成」三态，见下节 |
 | 品牌 | 应用名改为「小鸡毛」，appId `com.xiaojimao.pet`，设置「关于」标注定制来源 |
+
+完整版本记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 原创部分（宠物素材、休息/喝水/专注提醒、分心检测）仍归 PawPal 作者所有。
 
@@ -36,6 +39,29 @@
 - **打卡下班**：手动打卡后冻结当日工时与收入，当天不再提醒
 - **工作日配置**：周一到周日任选，默认周一到周五
 - 原有能力保留：休息提醒、喝水提醒、专注模式、分心检测、自定义 GIF 形象
+
+## WorkBuddy 任务状态
+
+接入 WorkBuddy 后，桌宠抬头就能看出任务进度：
+
+| 状态 | 桌面表现 | 触发事件 |
+| --- | --- | --- |
+| 任务中 | 左上角暖色任务牌 + 宠物进入专注姿态 + 暖光 | `UserPromptSubmit` |
+| 等你选 | 左上角橙红任务牌 + 宠物轻推一下 + 气泡/系统通知 | `Notification`、`PreToolUse`（AskUserQuestion / ExitPlanMode） |
+| 已完成 | 左上角绿牌 + 宠物跳两下 + 完成气泡 | `Stop`、`FinalStop` |
+
+多会话并行时按「等你选 > 任务中 > 已完成」取最需要你注意的那个，任务牌上会显示次数。
+
+**怎么接入**：设置 →「任务」→ 点「接入 WorkBuddy」，然后重启 WorkBuddy。按钮会把钩子写进
+`~/.workbuddy/settings.json`（保留你已有的钩子，改动前自动备份为 `settings.json.xiaojimao-<时间>`），
+并在 `~/.workbuddy/hooks/xiaojimao-status.sh` 放一个只负责落盘的小脚本。点「移除接入」可完整还原。
+
+**数据流**：WorkBuddy 钩子把事件 JSON 写进 `~/.xiaojimao/workbuddy-events/`（一次事件一个文件，
+写完即改名，桌宠每 0.8 秒消费一次并删除），桌宠在 `src/shared/workbuddy.ts` 里把事件折算成三态。
+不监听端口，不需要额外权限。
+
+已知边界：如果模型只是用文字提问（没有调用询问工具），钩子里只能看到 `Stop`，会显示「已完成」；
+「等你选」靠询问工具与通知事件识别，命中后保持 45 分钟或直到你再次发消息。
 
 ## 界面
 
@@ -67,8 +93,10 @@ corepack pnpm@11.1.1 dist:win
 
 ```
 src/shared/workClock.ts            上下班计算（倒计时 / 午休 / 加班 / 工资），移植自 OffWorkNow
-src/renderer/.../PetView.tsx       宠物窗口与右下角徽标
-src/renderer/.../SettingsView.tsx  设置页（上下班分组）
+src/shared/workbuddy.ts            WorkBuddy 事件 → 三态聚合（纯函数，带单测）
+src/main/workbuddyHooks.ts         WorkBuddy 钩子的安装 / 移除 / 检测
+src/renderer/.../PetView.tsx       宠物窗口、左上角任务牌与右下角徽标
+src/renderer/.../SettingsView.tsx  设置页（上下班 / 任务分组）
 src/main/main.ts                   提醒调度：上班 / 下班 / 整点 / 加班，系统通知 + 气泡
 pet_assets/                        宠物素材（小鸡毛、线条小狗、金毛 puppy）
 _ref/                              OffWorkNow 参考源码，仅用于对照，不参与构建

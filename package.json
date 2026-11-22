@@ -1,7 +1,7 @@
 {
   "name": "xiaojimao-pet",
-  "version": "1.0.0",
-  "description": "小鸡毛桌宠 - 上下班提醒与下班倒计时（基于 PawPal 修改）",
+  "version": "1.1.0",
+  "description": "小鸡毛桌宠 - 上下班提醒、下班倒计时与 WorkBuddy 任务状态（基于 PawPal 修改）",
   "author": "zebangeth",
   "license": "MIT",
   "type": "module",
