@@ -1,0 +1,8 @@
+# 小鸡毛桌宠的 bundle patch：把桥接插件挂进 DSH 配置树
+#
+# insert 添加新的插件行；id 必须与包名一致，且这一行不能写行尾注释
+# （DSH STORE 的提交预检用正则抓 "id: 值" 后面的换行）。
+
+- insert:
+    - id: dsh-xiaojimao-bridge
+      name: 'dsh-xiaojimao-bridge'

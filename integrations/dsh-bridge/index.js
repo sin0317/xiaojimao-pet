@@ -91,6 +91,15 @@ function handle(session, event) {
 }
 
 export function apply(ctx) {
+  // 加载标记：桌宠只看 .json，这个文件用来确认插件真的被宿主装上了
+  try {
+    const dir = eventDir();
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, ".plugin-loaded"), new Date().toISOString(), "utf8");
+  } catch {
+    // 标记写不了不影响功能
+  }
+
   ctx.effect(() => {
     const dispose = ctx.on("session/event", (session, event) => {
       try {
