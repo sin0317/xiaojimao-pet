@@ -22,7 +22,8 @@ import type {
   Diagnostics,
   PetState,
   Settings,
-  UpdateCheckResult
+  UpdateCheckResult,
+  WorkBuddyLinkStatus
 } from "../../../shared/types";
 import { getPetAsset } from "../assets";
 import { distractionHelp, formatDistractionState, formatTimer, formatTimestamp, localeFor } from "../format";
@@ -449,6 +450,31 @@ function customPetStateKindClass(state: PetState): string {
   return REQUIRED_CUSTOM_PET_STATES.includes(state) ? " is-required" : "";
 }
 
+function formatLinkAction(status: WorkBuddyLinkStatus | null, labels: SettingsCopy): string {
+  if (status?.state === "waiting") return labels.creditLinkWaiting;
+  return status?.state === "success" ? labels.creditLinkRelink : labels.creditLink;
+}
+
+function formatLinkStatus(status: WorkBuddyLinkStatus | null, labels: SettingsCopy): string {
+  if (!status) return "";
+  if (status.state === "waiting") return labels.creditLinkHint;
+  if (status.state === "error") return status.message;
+  if (status.state === "idle") return status.message;
+  const parts: string[] = [];
+  if (status.nickname) parts.push(labels.creditLinkConnected(status.nickname));
+  if (status.balance !== null) parts.push(`${status.balance}`);
+  if (status.updatedAt) {
+    parts.push(
+      labels.creditLinkSyncedAt(
+        new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(
+          new Date(status.updatedAt)
+        )
+      )
+    );
+  }
+  return parts.join(" · ");
+}
+
 function CreditRow({
   agentLabel,
   alert,
@@ -586,6 +612,19 @@ export function SettingsView(): JSX.Element {
   const [workBuddyBusy, setWorkBuddyBusy] = useState<AgentHookTarget | null>(null);
   const [agentDiag, setAgentDiag] = useState<Diagnostics | null>(null);
   const [diagCopied, setDiagCopied] = useState(false);
+  const [linkStatus, setLinkStatus] = useState<WorkBuddyLinkStatus | null>(null);
+
+  useEffect(() => {
+    void window.pawpal.getWorkBuddyLinkStatus().then(setLinkStatus);
+  }, []);
+
+  useEffect(() => {
+    if (linkStatus?.state !== "waiting") return;
+    const timer = window.setInterval(() => {
+      void window.pawpal.getWorkBuddyLinkStatus().then(setLinkStatus);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [linkStatus?.state]);
 
   useEffect(() => {
     if (!diagnosticsOpen) return;
@@ -1189,19 +1228,64 @@ export function SettingsView(): JSX.Element {
         <h2 className="prefs__group-title">{labels.credits}</h2>
         <p className="prefs__group-hint">{labels.creditsHint}</p>
         {draft.creditAlerts.map((alert) => (
-          <CreditRow
-            key={alert.agentId}
-            agentLabel={CREDIT_AGENT_LABELS[alert.agentId]}
-            alert={alert}
-            labels={labels}
-            onChange={(patch) =>
-              updateDraft({
-                creditAlerts: draft.creditAlerts.map((item) =>
-                  item.agentId === alert.agentId ? { ...item, ...patch } : item
-                )
-              })
-            }
-          />
+          <div key={alert.agentId}>
+            <CreditRow
+              agentLabel={CREDIT_AGENT_LABELS[alert.agentId]}
+              alert={alert}
+              labels={labels}
+              onChange={(patch) =>
+                updateDraft({
+                  creditAlerts: draft.creditAlerts.map((item) =>
+                    item.agentId === alert.agentId ? { ...item, ...patch } : item
+                  )
+                })
+              }
+            />
+            {alert.agentId === "workbuddy" ? (
+              <div className="credit-link">
+                <button
+                  type="button"
+                  className="pref-button"
+                  disabled={linkStatus?.state === "waiting"}
+                  onClick={() => {
+                    void (async () => {
+                      await window.pawpal.startWorkBuddyLink();
+                      setLinkStatus(await window.pawpal.getWorkBuddyLinkStatus());
+                    })();
+                  }}
+                >
+                  {formatLinkAction(linkStatus, labels)}
+                </button>
+                {linkStatus?.state === "success" ? (
+                  <button
+                    type="button"
+                    className="pref-link"
+                    onClick={() => {
+                      void (async () => {
+                        setLinkStatus(await window.pawpal.refreshWorkBuddyLink());
+                      })();
+                    }}
+                  >
+                    {labels.creditLinkRelink}
+                  </button>
+                ) : null}
+                {linkStatus && linkStatus.state !== "idle" ? (
+                  <button
+                    type="button"
+                    className="pref-link"
+                    onClick={() => {
+                      void (async () => {
+                        setLinkStatus(await window.pawpal.clearWorkBuddyLink());
+                      })();
+                    }}
+                  >
+                    {labels.creditLinkDisconnect}
+                  </button>
+                ) : null}
+                <span className="credit-link__status">{formatLinkStatus(linkStatus, labels)}</span>
+              </div>
+            ) : null}
+          </div>
         ))}
       </section>
 

@@ -23,7 +23,20 @@ import {
   DEFAULT_SETTINGS
 } from "../shared/constants";
 import { i18n, pick } from "../shared/i18n";
-import { CREDIT_AGENT_LABELS, creditDaysLeft, creditReminderKey } from "../shared/credits";
+import {
+  CREDIT_AGENT_LABELS,
+  creditDaysLeft,
+  creditReminderKey,
+  toDateInputValue
+} from "../shared/credits";
+import {
+  fetchCredits,
+  sealToken,
+  startLogin,
+  unsealToken,
+  waitForLogin,
+  type WorkBuddyAccount
+} from "./workbuddyLink";
 import { PET_STATE_ORDER } from "../shared/petAppearances";
 import { computeWork, dateKeyOf, formatDuration } from "../shared/workClock";
 import {
@@ -57,7 +70,8 @@ import type {
   StatsHistory,
   SpeechBubble,
   TodayStats,
-  UpdateCheckResult
+  UpdateCheckResult,
+  WorkBuddyLinkStatus
 } from "../shared/types";
 import {
   APP_NAME,
@@ -87,7 +101,7 @@ import {
   buildTrayMenuTemplate
 } from "./menus";
 import { createAppIcon, createTrayImage } from "./trayIcon";
-import { getStoredSettings, normalizeSettings } from "./settingsStore";
+import { getStoredSettings, normalizeCreditAlerts, normalizeSettings } from "./settingsStore";
 import {
   getCurrentStats,
   getStatsHistory,
@@ -124,6 +138,16 @@ type StoreSchema = {
   petHiddenByUser?: boolean;
   /** 积分提醒去重：agentId → 上次提醒的 key（含日期，一天一次） */
   creditReminders?: Record<string, string>;
+  /** WorkBuddy 扫码登录拿到的凭证（token 已用 safeStorage 加密） */
+  workbuddyLink?: {
+    tokenCipher: string;
+    refreshCipher: string | null;
+    domain: string;
+    uid: string | null;
+    nickname: string | null;
+    expiresAt: number | null;
+    updatedAt: number;
+  };
 };
 
 type PetPosition = {
@@ -200,6 +224,134 @@ const APPROVAL_POLL_MS = 400;
 /** 积分到期检查间隔 */
 const CREDIT_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 let creditTimer: NodeJS.Timeout | null = null;
+
+/** WorkBuddy 扫码取数：状态只在主进程维护，token 不出主进程 */
+let linkStatus: WorkBuddyLinkStatus = {
+  state: "idle",
+  message: "",
+  nickname: null,
+  balance: null,
+  expiresAt: null,
+  updatedAt: null
+};
+let linkAborted = false;
+
+function setLinkStatus(next: Partial<WorkBuddyLinkStatus>): void {
+  linkStatus = { ...linkStatus, ...next };
+  sendToAll("workbuddy:link-status", linkStatus);
+}
+
+/** 把抓到的余额与到期日写回设置，提醒逻辑就不用改 */
+function applyCreditsToSettings(credits: { remaining: number; expiresAt: number | null }): void {
+  const settings = getSettings();
+  const alerts = normalizeCreditAlerts(settings.creditAlerts).map((item) =>
+    item.agentId === "workbuddy"
+      ? {
+          ...item,
+          balance: credits.remaining,
+          expiresOn: credits.expiresAt ? toDateInputValue(credits.expiresAt) : item.expiresOn,
+          enabled: true
+        }
+      : item
+  );
+  store.set("settings", { ...settings, creditAlerts: alerts });
+  publishSnapshot();
+}
+
+async function refreshWorkBuddyCredits(): Promise<void> {
+  const link = store.get("workbuddyLink");
+  if (!link) return;
+
+  const labels = text().settings;
+  if (link.expiresAt && link.expiresAt < Date.now()) {
+    setLinkStatus({ state: "error", message: labels.creditLinkExpired });
+    return;
+  }
+
+  const token = unsealToken(link.tokenCipher);
+  if (!token) {
+    setLinkStatus({ state: "error", message: labels.creditLinkUnavailable });
+    return;
+  }
+
+  try {
+    const account: WorkBuddyAccount = {
+      accessToken: token,
+      refreshToken: null,
+      domain: link.domain,
+      uid: link.uid,
+      nickname: link.nickname,
+      expiresAt: link.expiresAt
+    };
+    const credits = await fetchCredits(account);
+    if (!credits) throw new Error(labels.creditLinkEmpty);
+    applyCreditsToSettings(credits);
+    setLinkStatus({
+      state: "success",
+      message: "",
+      nickname: link.nickname,
+      balance: credits.remaining,
+      expiresAt: credits.expiresAt,
+      updatedAt: Date.now()
+    });
+  } catch (error) {
+    setLinkStatus({
+      state: "error",
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+/** 打开浏览器走官方登录，后台轮询换 token；成功后立刻抓一次积分 */
+async function startWorkBuddyLink(): Promise<{ ok: boolean; message?: string }> {
+  if (linkStatus.state === "waiting") return { ok: true };
+  const labels = text().settings;
+
+  try {
+    const { state, authUrl } = await startLogin();
+    linkAborted = false;
+    setLinkStatus({ state: "waiting", message: labels.creditLinkWaiting });
+    await shell.openExternal(authUrl);
+
+    void (async () => {
+      try {
+        const account = await waitForLogin(state, () => linkAborted);
+        if (!account) {
+          setLinkStatus({ state: "idle", message: labels.creditLinkTimeout });
+          return;
+        }
+
+        const tokenCipher = sealToken(account.accessToken);
+        if (!tokenCipher) {
+          setLinkStatus({ state: "error", message: labels.creditLinkNoKeychain });
+          return;
+        }
+
+        store.set("workbuddyLink", {
+          tokenCipher,
+          refreshCipher: account.refreshToken ? sealToken(account.refreshToken) : null,
+          domain: account.domain,
+          uid: account.uid,
+          nickname: account.nickname,
+          expiresAt: account.expiresAt,
+          updatedAt: Date.now()
+        });
+        await refreshWorkBuddyCredits();
+      } catch (error) {
+        setLinkStatus({
+          state: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    })();
+
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setLinkStatus({ state: "error", message });
+    return { ok: false, message };
+  }
+}
 let workBuddyTimer: NodeJS.Timeout | null = null;
 let workBuddyIngesting = false;
 let petRendererReady = false;
@@ -1846,6 +1998,25 @@ function registerIpc(): void {
   ipcMain.on("workbuddy:show-status", showWorkBuddyDetails);
 
   ipcMain.handle("diagnostics:get", () => buildDiagnostics());
+  ipcMain.handle("workbuddy:link-start", () => startWorkBuddyLink());
+  ipcMain.handle("workbuddy:link-status", () => linkStatus);
+  ipcMain.handle("workbuddy:link-refresh", async () => {
+    await refreshWorkBuddyCredits();
+    return linkStatus;
+  });
+  ipcMain.handle("workbuddy:link-clear", () => {
+    store.delete("workbuddyLink");
+    linkAborted = true;
+    linkStatus = {
+      state: "idle",
+      message: "",
+      nickname: null,
+      balance: null,
+      expiresAt: null,
+      updatedAt: null
+    };
+    return linkStatus;
+  });
   ipcMain.handle("clipboard:write", (_event, text: unknown) => {
     clipboard.writeText(String(text ?? ""));
     return true;
@@ -1917,6 +2088,17 @@ app.whenReady().then(() => {
   // 启动 8 秒后再查积分，避开开机那堆提醒；之后每 30 分钟看一眼
   setTimeout(() => checkCreditAlerts(), 8000);
   creditTimer = setInterval(() => checkCreditAlerts(), CREDIT_CHECK_INTERVAL_MS);
+
+  // 上次扫码登录过：开机补一次余额，顺便验证 token 还有效
+  const savedLink = store.get("workbuddyLink");
+  if (savedLink) {
+    linkStatus = {
+      ...linkStatus,
+      nickname: savedLink.nickname,
+      updatedAt: savedLink.updatedAt
+    };
+    setTimeout(() => void refreshWorkBuddyCredits(), 10_000);
+  }
   if (IS_DEV) {
     createSettingsWindow();
   }

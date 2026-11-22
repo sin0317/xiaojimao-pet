@@ -45,6 +45,16 @@ export type Diagnostics = {
   agents: AgentDiagnostics[];
 };
 
+/** WorkBuddy 扫码取数的状态（只暴露昵称和余额，token 永远不出主进程） */
+export type WorkBuddyLinkStatus = {
+  state: "idle" | "waiting" | "success" | "error";
+  message: string;
+  nickname: string | null;
+  balance: number | null;
+  expiresAt: number | null;
+  updatedAt: number | null;
+};
+
 export type PetAppearanceId = BuiltInPetAppearanceId | "custom";
 
 export type PetFacing = "left" | "right";

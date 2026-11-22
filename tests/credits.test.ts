@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   creditDaysLeft,
+  normalizeTimestampMs,
+  parseResourceSummary,
   creditReminderKey,
   defaultCreditAlert,
   isCreditDueSoon,
@@ -83,6 +85,65 @@ export const tests = [
     run(): void {
       const alert = { ...defaultCreditAlert("workbuddy"), expiresOn: "2026-11-23", enabled: false };
       assert.equal(creditReminderKey(alert, TODAY), null);
+    }
+  },
+  {
+    name: "credits-api: 解析余额与到期（Pascal 字段）",
+    run(): void {
+      const parsed = parseResourceSummary({
+        code: 0,
+        data: {
+          CycleRemainCapacity: 2328.29,
+          CycleTotalCapacity: 4485,
+          CycleCapacityUsedPrecise: 2156.71,
+          CycleEndTime: "2026-11-30 23:59:59"
+        }
+      });
+      assert.ok(parsed);
+      assert.equal(parsed.remaining, 2328);
+      assert.equal(parsed.total, 4485);
+      assert.ok(parsed.expiresAt);
+      assert.equal(new Date(parsed.expiresAt).getDate(), 30);
+    }
+  },
+  {
+    name: "credits-api: 缺总量时用余+用补",
+    run(): void {
+      const parsed = parseResourceSummary({
+        data: { CapacityRemain: 10, CapacityUsed: 5 }
+      });
+      assert.ok(parsed);
+      assert.equal(parsed.remaining, 10);
+      assert.equal(parsed.total, 15);
+    }
+  },
+  {
+    name: "credits-api: DeductionEndTime 是占位值时改用周期结束",
+    run(): void {
+      const parsed = parseResourceSummary({
+        data: {
+          CapacityRemain: 100,
+          DeductionEndTime: "2049-12-31 23:59:59",
+          CycleEndTime: "2026-12-05 00:00:00"
+        }
+      });
+      assert.ok(parsed?.expiresAt);
+      assert.equal(new Date(parsed.expiresAt).getMonth(), 11);
+    }
+  },
+  {
+    name: "credits-api: 完全解析不出来时返回 null",
+    run(): void {
+      assert.equal(parseResourceSummary({ data: { foo: "bar" } }), null);
+      assert.equal(parseResourceSummary(null), null);
+    }
+  },
+  {
+    name: "credits-api: 秒级时间戳归一化成毫秒",
+    run(): void {
+      assert.equal(normalizeTimestampMs(1_800_000_000), 1_800_000_000_000);
+      assert.equal(normalizeTimestampMs(1_800_000_000_000), 1_800_000_000_000);
+      assert.equal(normalizeTimestampMs("2026-11-30"), new Date("2026-11-30").getTime());
     }
   }
 ];

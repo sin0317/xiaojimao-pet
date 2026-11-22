@@ -107,3 +107,131 @@ export function creditReminderKey(alert: CreditAlert, now: Date): string | null 
   const dateKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
   return `${alert.agentId}:${days}:${dateKey}`;
 }
+
+/* ------------------------------------------------------------------ */
+/* WorkBuddy 官方接口返回值的解析（扫码登录后才有 token，见 workbuddyLink） */
+/* ------------------------------------------------------------------ */
+
+const REMAINING_KEYS = [
+  "CycleCapacityRemainPrecise",
+  "CycleCapacityRemain",
+  "CycleRemainCapacity",
+  "CapacityRemainPrecise",
+  "CapacityRemain",
+  "SlicePeriodCapacityRemainPrecise",
+  "SlicePeriodCapacityRemain"
+];
+
+const TOTAL_KEYS = [
+  "CycleCapacitySizePrecise",
+  "CycleCapacitySize",
+  "CycleTotalCapacity",
+  "CapacitySizePrecise",
+  "CapacitySize",
+  "SlicePeriodCapacitySizePrecise",
+  "SlicePeriodCapacitySize"
+];
+
+const USED_KEYS = [
+  "CycleCapacityUsedPrecise",
+  "CycleCapacityUsed",
+  "CycleUsedCapacity",
+  "CapacityUsedPrecise",
+  "CapacityUsed",
+  "SlicePeriodCapacityUsedPrecise",
+  "SlicePeriodCapacityUsed"
+];
+
+const DEDUCTION_KEYS = ["DeductionEndTime", "deductionEndTime", "ExpiredTime", "expiredTime"];
+const CYCLE_KEYS = ["CycleEndTime", "cycleEndTime"];
+
+/** 730 天以外当作「长期有效」，不拿它去提醒 */
+const FAR_FUTURE_MS = 730 * 86_400_000;
+/** DeductionEndTime 比 CycleEndTime 晚太多时视为占位值 */
+const EXPIRY_OVERRIDE_MS = 365 * 86_400_000;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function firstNumber(raw: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function firstTimestamp(raw: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const parsed = normalizeTimestampMs(raw[key]);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+/** 秒 / 毫秒 / RFC3339 / 本地时间字符串，统一成毫秒 */
+export function normalizeTimestampMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.abs(value) < 10_000_000_000 ? Math.round(value * 1000) : Math.round(value);
+  }
+  if (typeof value !== "string") return null;
+
+  const text = value.trim();
+  if (!text) return null;
+  if (/^\d+$/.test(text)) return normalizeTimestampMs(Number(text));
+
+  const parsed = Date.parse(text.includes("T") ? text : text.replace(" ", "T"));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export type WorkBuddyCredits = {
+  remaining: number;
+  total: number;
+  expiresAt: number | null;
+};
+
+/**
+ * 解析 `/billing/meter/get-user-resource-summary` 的返回。
+ * 字段名有 Pascal 和 camel 两套，按优先级依次尝试；解析不出来返回 null。
+ */
+export function parseResourceSummary(raw: unknown, now = Date.now()): WorkBuddyCredits | null {
+  const root = asRecord(raw);
+  if (!root) return null;
+  const data = asRecord(root.data) ?? root;
+
+  const remaining = firstNumber(data, REMAINING_KEYS);
+  const total = firstNumber(data, TOTAL_KEYS);
+  const used = firstNumber(data, USED_KEYS);
+  if (remaining === null && total === null && used === null) return null;
+
+  const remainingValue = Math.max(0, remaining ?? Math.max(0, (total ?? 0) - (used ?? 0)));
+  const totalValue = Math.max(0, total ?? remainingValue + (used ?? 0));
+
+  const deduction = firstTimestamp(data, DEDUCTION_KEYS);
+  const cycle = firstTimestamp(data, CYCLE_KEYS);
+  let expiresAt = deduction ?? cycle;
+  if (deduction !== null && cycle !== null && deduction - cycle > EXPIRY_OVERRIDE_MS) {
+    expiresAt = cycle;
+  }
+  if (expiresAt !== null && expiresAt - now > FAR_FUTURE_MS) expiresAt = null;
+
+  return {
+    remaining: Math.round(remainingValue),
+    total: Math.round(totalValue),
+    expiresAt
+  };
+}
+
+/** 毫秒 → YYYY-MM-DD（本地时区），给设置里的日期框用 */
+export function toDateInputValue(ms: number): string {
+  const date = new Date(ms);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
