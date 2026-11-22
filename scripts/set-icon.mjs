@@ -12,13 +12,21 @@
  * 下载：https://github.com/electron/rcedit/releases
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const exe = join(root, "dist", "win-unpacked", "小鸡毛桌宠.exe");
 const icon = join(root, "build", "icon.ico");
+
+// 版本号以 package.json 为准，补齐成 Windows 需要的四段式（1.1.0 -> 1.1.0.0）
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const versionParts = String(pkg.version ?? "0.0.0")
+  .split(".")
+  .slice(0, 4);
+while (versionParts.length < 4) versionParts.push("0");
+const fileVersion = versionParts.join(".");
 
 const candidates = [
   join(root, "scripts", "tools", "rcedit-x64.exe"),
@@ -53,7 +61,7 @@ execFileSync(
     "小鸡毛桌宠",
     "--set-version-string",
     "FileDescription",
-    "小鸡毛桌宠 - 上下班提醒与下班倒计时",
+    "小鸡毛桌宠 - 上班倒计时与 WorkBuddy 任务状态",
     "--set-version-string",
     "CompanyName",
     "Sin",
@@ -61,11 +69,11 @@ execFileSync(
     "OriginalFilename",
     "小鸡毛桌宠.exe",
     "--set-file-version",
-    "1.0.0.0",
+    fileVersion,
     "--set-product-version",
-    "1.0.0.0"
+    fileVersion
   ],
   { stdio: "inherit" }
 );
 
-console.log(`图标与版本信息已写入：${exe}`);
+console.log(`图标与版本信息已写入：${exe}（${fileVersion}）`);

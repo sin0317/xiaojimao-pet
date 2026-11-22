@@ -84,10 +84,16 @@ corepack pnpm@11.1.1 dev
 ## 打包
 
 ```bash
+# 1. 打免安装目录（dist/win-unpacked，桌面快捷方式指的就是这里）
 corepack pnpm@11.1.1 dist:win
+
+# 2. 给 exe 补图标与版本信息（版本号读自 package.json）
+corepack pnpm@11.1.1 reicon
 ```
 
-产物在 `dist/`：NSIS 安装包（可改安装目录）+ 免安装目录。
+`dist:win` 带 `--config.win.signAndEditExecutable=false`，所以 exe 的图标 / 版本信息要靠 `reicon` 补写；
+NSIS 安装包由 `corepack pnpm@11.1.1 dist` 或 CI 的 release 流水线产出。
+改了代码后必须重跑这两步，桌面快捷方式才会打开新版。
 
 ## 目录
 
