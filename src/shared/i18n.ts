@@ -134,6 +134,10 @@ export const I18N = {
         const left = balance === null ? "" : `，还剩 ${balance} 积分`;
         return `${agent} 的积分${when}到期${left}，记得用掉`;
       },
+      creditExpiringUnknown: (agent: string, days: number) => {
+        const when = days <= 0 ? "今天" : `${days} 天后`;
+        return `${agent} 有积分${when}到期，记得用掉`;
+      },
     },
     actions: {
       breakDone: "我站起来了",
@@ -336,6 +340,8 @@ export const I18N = {
       wbSwitchUpdated: (time: string) => `${time} 同步`,
       wbSwitchEmpty: "没找到 ~/.wb-switch/accounts.json",
       wbSwitchNoToken: "读不到账号，先确认 workbuddy-switch 里有登录过的账号",
+      wbSwitchHint:
+        "余额是账号总量；到期日只是最早那批积分的过期时间——具体那一刻过期多少，接口不提供，所以提醒里只写「有积分要到期」。",
       workBuddyRemove: "移除接入",
       workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
       workBuddyEventDir: "事件目录",
@@ -536,6 +542,10 @@ export const I18N = {
         const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
         const left = balance === null ? "" : `, ${balance} credits left`;
         return `${agent} credits expire ${when}${left} — go spend them`;
+      },
+      creditExpiringUnknown: (agent: string, days: number) => {
+        const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
+        return `${agent} has credits expiring ${when} — go spend them`;
       },
     },
     actions: {
@@ -744,6 +754,8 @@ export const I18N = {
       wbSwitchUpdated: (time: string) => `synced ${time}`,
       wbSwitchEmpty: "No ~/.wb-switch/accounts.json found",
       wbSwitchNoToken: "No accounts found — make sure workbuddy-switch has logged-in accounts",
+      wbSwitchHint:
+        "Balance is the account total; the date is only when the earliest batch expires — the API doesn't say how much, so reminders just say credits are expiring.",
       workBuddyRemove: "Disconnect",
       workBuddyRestartHint:
         "Restart WorkBuddy to take effect. The previous config is backed up.",

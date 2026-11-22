@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { i18n } from "../src/shared/i18n";
 import {
   creditDaysLeft,
   normalizeTimestampMs,
@@ -146,6 +147,17 @@ export const tests = [
       assert.equal(normalizeTimestampMs(1_800_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs(1_800_000_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs("2026-11-30"), new Date("2026-11-30").getTime());
+    }
+  },
+  {
+    name: "credit: 抓来的余额只说有积分要到期",
+    run(): void {
+      const bubble = i18n("zh-CN").bubble;
+      const message = bubble.creditExpiringUnknown("小静", 3);
+      assert.ok(message.includes("有积分"));
+      assert.ok(message.includes("3 天后"));
+      assert.ok(!message.includes("积分到期，"));
+      assert.equal(bubble.creditExpiring("WorkBuddy", 0, 500).includes("还剩 500"), true);
     }
   },
   {

@@ -1392,14 +1392,15 @@ export function SettingsView(): JSX.Element {
                         <span className="wb-list__credit">
                           {account.error
                             ? account.error
-                            : `${account.remaining} · ${
+                            : `余额 ${account.remaining} · ${
                                 account.expiresAt ? formatShortDate(account.expiresAt) : "—"
-                              }`}
+                              } 到期`}
                         </span>
                       </li>
                     ))}
                   </ul>
                 ) : null}
+                {wbSwitch ? <p className="prefs__diag-hint">{labels.wbSwitchHint}</p> : null}
               </>
             ) : null}
           </div>

@@ -26,6 +26,12 @@ export type CreditAlert = {
   /** 提前几天提醒 */
   remindDays: number;
   enabled: boolean;
+  /**
+   * balance 是不是「就是这批要过期的量」。
+   * 手动填的是（用户自己说这批多少），自动抓来的不是——
+   * 接口只给总余额和最早到期日，那一刻到底过期多少查不到。
+   */
+  amountIsExact: boolean;
 };
 
 export function defaultCreditAlert(agentId: CreditAgentId): CreditAlert {
@@ -35,7 +41,8 @@ export function defaultCreditAlert(agentId: CreditAgentId): CreditAlert {
     expiresOn: null,
     resetDay: null,
     remindDays: 3,
-    enabled: false
+    enabled: false,
+    amountIsExact: true
   };
 }
 

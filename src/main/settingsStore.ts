@@ -73,7 +73,9 @@ export function normalizeCreditAlerts(input: unknown): CreditAlert[] {
       expiresOn,
       resetDay,
       remindDays,
-      enabled: found.enabled === true
+      enabled: found.enabled === true,
+      // 老数据默认按「用户手填的精确量」处理
+      amountIsExact: found.amountIsExact !== false
     };
   });
 }

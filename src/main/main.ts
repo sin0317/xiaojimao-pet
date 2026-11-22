@@ -272,7 +272,9 @@ function applyCreditsToSettings(
           ...item,
           balance: credits.remaining,
           expiresOn: credits.expiresAt ? toDateInputValue(credits.expiresAt) : item.expiresOn,
-          enabled: true
+          enabled: true,
+          // 抓来的是总余额，不是「这一批要过期的量」——措辞要区分开
+          amountIsExact: false
         }
       : item
   );
@@ -1481,7 +1483,13 @@ function checkCreditAlerts(): void {
 
   const now = new Date();
   const reminded = { ...(store.get("creditReminders") ?? {}) };
-  const due: Array<{ agentId: CreditAgentId; key: string; days: number; balance: number | null }> = [];
+  const due: Array<{
+    agentId: CreditAgentId;
+    key: string;
+    days: number;
+    balance: number | null;
+    exact: boolean;
+  }> = [];
 
   for (const alert of alerts) {
     const key = creditReminderKey(alert, now);
@@ -1490,7 +1498,8 @@ function checkCreditAlerts(): void {
       agentId: alert.agentId,
       key,
       days: creditDaysLeft(alert, now) ?? 0,
-      balance: alert.balance
+      balance: alert.balance,
+      exact: alert.amountIsExact !== false
     });
   }
   if (!due.length) return;
@@ -1499,7 +1508,12 @@ function checkCreditAlerts(): void {
   const labels = text();
   const message = due
     .slice(0, 3)
-    .map((item) => labels.bubble.creditExpiring(CREDIT_AGENT_LABELS[item.agentId], item.days, item.balance))
+    .map((item) =>
+      // 抓来的余额是「总共还有多少」，不是「这一刻过期多少」，所以不报数字
+      item.exact
+        ? labels.bubble.creditExpiring(CREDIT_AGENT_LABELS[item.agentId], item.days, item.balance)
+        : labels.bubble.creditExpiringUnknown(CREDIT_AGENT_LABELS[item.agentId], item.days)
+    )
     .join("\n");
 
   showBubble({
