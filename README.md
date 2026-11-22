@@ -9,7 +9,7 @@
 
   <p>
     <a href="../../releases/latest"><img src="https://img.shields.io/badge/下载-Windows%20安装包-4B6B4A?style=flat-square" alt="下载" /></a>
-    <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/版本-1.2.1-D8A24A?style=flat-square" alt="版本" /></a>
+    <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/版本-1.3.0-D8A24A?style=flat-square" alt="版本" /></a>
     <img src="https://img.shields.io/badge/平台-Windows-555?style=flat-square" alt="平台" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/协议-MIT-555?style=flat-square" alt="协议" /></a>
   </p>
