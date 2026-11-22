@@ -94,8 +94,15 @@ export const tests = [
         {},
         [
           event("UserPromptSubmit", { prompt: "A" }, T0),
-          { ...event("Notification", {}, T0 + 100), payload: { session_id: "s2", hook_event_name: "Notification" } },
-          event("UserPromptSubmit", { prompt: "B" }, T0 + 200)
+          event("UserPromptSubmit", { prompt: "B" }, T0 + 200),
+          {
+            ...event("Notification", { notification_type: "permission_request" }, T0 + 500),
+            payload: {
+              session_id: "s2",
+              hook_event_name: "Notification",
+              notification_type: "permission_request"
+            }
+          }
         ]
       );
       const status = summarizeWorkBuddy(sessions, T0 + 1000);
@@ -136,6 +143,67 @@ export const tests = [
       ]);
       assert.equal(fromDir.s2.agent, "Qoder");
       assert.equal(fromDir.s3.agent, "Trae");
+    }
+  },
+  {
+    name: "notification at task start does not count as needs-input",
+    run(): void {
+      // 任务刚开 300ms 的那条提示音，不能把状态带成「等你选」
+      const sessions = applyWorkBuddyEvents({}, [
+        {
+          payload: { session_id: "s", hook_event_name: "UserPromptSubmit", cwd: "d:\\p", prompt: "改个 bug" },
+          at: T0
+        },
+        {
+          payload: { session_id: "s", hook_event_name: "Notification", cwd: "d:\\p", message: "任务已开始" },
+          at: T0 + 300
+        }
+      ]);
+      assert.equal(sessions.s.phase, "running");
+      assert.equal(sessions.s.needsInputAt, null);
+    }
+  },
+  {
+    name: "notification mid-task still raises needs-input",
+    run(): void {
+      const sessions = applyWorkBuddyEvents({}, [
+        {
+          payload: { session_id: "s", hook_event_name: "UserPromptSubmit", cwd: "d:\\p", prompt: "改个 bug" },
+          at: T0
+        },
+        {
+          payload: {
+            session_id: "s",
+            hook_event_name: "Notification",
+            cwd: "d:\\p",
+            notification_type: "permission_request",
+            message: "需要你确认是否运行命令"
+          },
+          at: T0 + 5000
+        }
+      ]);
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 6000).phase, "needsInput");
+    }
+  },
+  {
+    name: "notification with explicit type is honoured even when early",
+    run(): void {
+      const sessions = applyWorkBuddyEvents({}, [
+        {
+          payload: { session_id: "s", hook_event_name: "UserPromptSubmit", cwd: "d:\\p", prompt: "改个 bug" },
+          at: T0
+        },
+        {
+          payload: {
+            session_id: "s",
+            hook_event_name: "Notification",
+            cwd: "d:\\p",
+            notification_type: "permission_request"
+          },
+          at: T0 + 200
+        }
+      ]);
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 400).phase, "needsInput");
     }
   },
   {

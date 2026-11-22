@@ -23,6 +23,12 @@ export type WorkBuddyHookPayload = {
   final_stop_reason?: unknown;
   stop_hook_active?: unknown;
   reason?: unknown;
+  /** 通知类事件的附加字段，用来判断是不是真的在等人 */
+  notification_type?: unknown;
+  type?: unknown;
+  message?: unknown;
+  notification?: unknown;
+  text?: unknown;
   /** 部分宿主会带 client / agent 字段，用来标记来源 */
   client?: unknown;
   agent?: unknown;
@@ -70,6 +76,8 @@ export const WORKBUDDY_NEEDS_INPUT_TTL_MS = 45 * 60 * 1000;
 export const WORKBUDDY_SESSION_TTL_MS = 3 * 60 * 60 * 1000;
 export const WORKBUDDY_DONE_TTL_MS = 30 * 60 * 1000;
 export const WORKBUDDY_MAX_SESSIONS = 5;
+/** 任务刚起步的这段窗口里，没说清楚的通知一律当噪音丢掉 */
+export const WORKBUDDY_STARTUP_GRACE_MS = 2500;
 
 export const EMPTY_WORKBUDDY_STATUS: WorkBuddyStatus = {
   phase: "idle",
@@ -82,6 +90,10 @@ export const EMPTY_WORKBUDDY_STATUS: WorkBuddyStatus = {
 /** 会把「等你选」透出来的工具名（AskUserQuestion / ExitPlanMode 等） */
 const QUESTION_TOOL_PATTERN =
   /askuserquestion|ask_followup_question|ask_question|exitplanmode|request_permission|confirm|askfollowup/i;
+
+/** 通知类事件里，能说明「真在等你」的关键词 */
+const NEEDS_INPUT_PATTERN =
+  /permission|approve|approval|confirm|allow|denied|waiting|needs?.{0,6}(input|attention)|requires?.{0,6}(input|approval)|需要|确认|批准|授权|等待|选择|点击/i;
 
 /** 各 agent 写事件时可能用到的写法 → 桌面展示名 */
 const AGENT_ALIASES: Record<string, string> = {
@@ -143,6 +155,21 @@ export function summarizeMessage(text: string, max = 42): string {
 
 export function isQuestionTool(toolName: unknown): boolean {
   return QUESTION_TOOL_PATTERN.test(asText(toolName));
+}
+
+/**
+ * 通知事件是否真的意味着「需要你介入」。
+ * 返回 true = 明确要人；false = 明确不要（比如任务开始的提示音）；null = 看不出来。
+ */
+export function notificationNeedsInput(payload: WorkBuddyHookPayload): boolean | null {
+  const type = asText(payload.notification_type) || asText(payload.type);
+  if (type) {
+    return /permission|approval|attention|needs?.?input|elicitation|question/i.test(type);
+  }
+  const message =
+    asText(payload.message) || asText(payload.notification) || asText(payload.text) || asText(payload.reason);
+  if (message) return NEEDS_INPUT_PATTERN.test(message);
+  return null;
 }
 
 export function isWorkBuddyPhase(value: unknown): value is WorkBuddyPhase {
@@ -211,6 +238,13 @@ export function applyWorkBuddyEvents(
     }
 
     if (name === "Notification") {
+      const explicit = notificationNeedsInput(payload);
+      // 明确不是求助的通知（任务开始/结束的提示音）直接忽略
+      if (explicit === false) continue;
+      // 看不出类型时，只接受任务已经跑了一会儿之后的通知，
+      // 否则开局那条提示会把状态误判成「等你选」
+      if (explicit === null && at - base.updatedAt < WORKBUDDY_STARTUP_GRACE_MS) continue;
+
       // needsInput 是叠加态：底层 phase 保持不动，靠 needsInputAt 浮到最前
       next[id] = {
         ...base,

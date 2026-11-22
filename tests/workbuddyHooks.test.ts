@@ -85,7 +85,8 @@ export const tests = [
       const script = buildPowerShellHookScript("C:\\Users\\sin\\.xiaojimao\\workbuddy-events", "Qoder");
       assert.match(script, /\$agent = 'Qoder'/);
       assert.match(script, /Join-Path \$root \$agent/);
-      assert.match(script, /\[Console\]::In\.ReadToEnd\(\)/);
+      assert.match(script, /\[Console\]::IsInputRedirected/);
+      assert.match(script, /OpenStandardInput\(\)/);
     }
   },
   {

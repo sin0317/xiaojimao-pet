@@ -146,6 +146,7 @@ let breakDueAt: number | null = null;
 let hydrationDueAt: number | null = null;
 let focusEndsAt: number | null = null;
 let bubbleTimer: NodeJS.Timeout | null = null;
+let currentBubbleId: string | null = null;
 let dragTimer: NodeJS.Timeout | null = null;
 let dragSafetyTimer: NodeJS.Timeout | null = null;
 let breakRunVelocity: PetPosition = { x: 0, y: 0 };
@@ -172,6 +173,9 @@ let workBuddyIngesting = false;
 let petRendererReady = false;
 /** 渲染进程还没就绪时先把提醒挂起，就绪后补发 */
 let pendingWorkBuddyNotice: WorkBuddyStatus | null = null;
+/** 「等你选」晚 1.2 秒再弹，避开任务刚起步的瞬时抖动 */
+let needsInputNoticeTimer: NodeJS.Timeout | null = null;
+const NEEDS_INPUT_NOTICE_DELAY_MS = 1200;
 
 function setPetMouseInteractive(interactive: boolean): void {
   if (!petWindow || petWindow.isDestroyed() || petMouseInteractive === interactive) return;
@@ -352,13 +356,19 @@ function setPetFacing(next: PetFacing): void {
 
 function showBubble(bubble: SpeechBubble): void {
   if (bubbleTimer) clearTimeout(bubbleTimer);
+  currentBubbleId = bubble.id;
   sendToPet("pet:show-bubble", bubble);
   if (bubble.autoDismissMs) {
-    bubbleTimer = setTimeout(() => hideBubble(), bubble.autoDismissMs);
+    const id = bubble.id;
+    bubbleTimer = setTimeout(() => {
+      if (currentBubbleId === id) hideBubble();
+    }, bubble.autoDismissMs);
   }
 }
 
-function hideBubble(): void {
+function hideBubble(options: { onlyId?: string } = {}): void {
+  if (options.onlyId && currentBubbleId !== options.onlyId) return;
+  currentBubbleId = null;
   if (bubbleTimer) {
     clearTimeout(bubbleTimer);
     bubbleTimer = null;
@@ -980,20 +990,27 @@ function reactToWorkBuddyPhase(next: WorkBuddyStatus): void {
     ensurePetWindowVisible();
     if (!focusActive) setPetState("focusAlert");
     if (!settings.workBuddyNotifyEnabled) return;
-    if (!petRendererReady) {
-      pendingWorkBuddyNotice = next;
-      return;
-    }
-    const message = pick(labels.bubble.workBuddyNeedsInput)(agentName);
-    showBubble({
-      id: "workbuddy-needs-input",
-      message,
-      actions: [
-        { id: "workbuddy:dismiss", label: labels.actions.workBuddyDismiss, kind: "primary" }
-      ],
-      autoDismissMs: 20000
-    });
-    showSystemNotification(message);
+
+    // 任务刚起步时状态会抖一下，等 1.2 秒确认还在等你再弹
+    if (needsInputNoticeTimer) clearTimeout(needsInputNoticeTimer);
+    needsInputNoticeTimer = setTimeout(() => {
+      needsInputNoticeTimer = null;
+      if (workBuddyStatus.phase !== "needsInput") return;
+      if (!petRendererReady) {
+        pendingWorkBuddyNotice = workBuddyStatus;
+        return;
+      }
+      const message = pick(labels.bubble.workBuddyNeedsInput)(agentName);
+      showBubble({
+        id: "workbuddy-needs-input",
+        message,
+        actions: [
+          { id: "workbuddy:dismiss", label: labels.actions.workBuddyDismiss, kind: "primary" }
+        ],
+        autoDismissMs: 20000
+      });
+      showSystemNotification(message);
+    }, NEEDS_INPUT_NOTICE_DELAY_MS);
     return;
   }
 
@@ -1029,6 +1046,16 @@ function applyWorkBuddyStatus(next: WorkBuddyStatus): void {
   const previous = workBuddyStatus;
   const changed = JSON.stringify(previous) !== JSON.stringify(next);
   workBuddyStatus = next;
+
+  // 状态离开了「等你选」，之前那条气泡就不该继续挂着
+  if (previous.phase === "needsInput" && next.phase !== "needsInput") {
+    if (needsInputNoticeTimer) {
+      clearTimeout(needsInputNoticeTimer);
+      needsInputNoticeTimer = null;
+    }
+    hideBubble({ onlyId: "workbuddy-needs-input" });
+  }
+
   if (previous.phase !== next.phase) reactToWorkBuddyPhase(next);
   if (changed) publishSnapshot();
 }
@@ -1108,6 +1135,10 @@ function scheduleWorkBuddyBridge(): void {
   }
 
   if (!getSettings().workBuddyEnabled) {
+    if (needsInputNoticeTimer) {
+      clearTimeout(needsInputNoticeTimer);
+      needsInputNoticeTimer = null;
+    }
     workBuddySessions = {};
     applyWorkBuddyStatus(EMPTY_WORKBUDDY_STATUS);
     return;
