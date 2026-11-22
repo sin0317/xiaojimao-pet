@@ -291,7 +291,7 @@ export const I18N = {
       workBuddyNotInstalled: "未接入",
       workBuddyInstall: "接入 WorkBuddy",
       workBuddyConnect: "接入",
-      workBuddyInstallHint: "未接入，点「接入」写入钩子",
+      workBuddyInstallHint: (agent: string) => `${agent} 未接入，点「接入」写入钩子`,
       workBuddyUnsupported: "需装插件",
       workBuddyDshReadyHint: "Cordis 桥接插件已装；重启 DeepSeek Harness 后生效。",
       workBuddyDshHint: "DeepSeek Harness 没有钩子配置，要装一个桥接插件（见 README「DeepSeek Harness 接入」）",
@@ -344,7 +344,8 @@ export const I18N = {
       wbSwitchHint:
         "余额是账号总量；到期日只是最早那批积分的过期时间——具体那一刻过期多少，接口不提供，所以提醒里只写「有积分要到期」。",
       workBuddyRemove: "移除接入",
-      workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
+      workBuddyRestartHint: (agent: string) => `重启 ${agent} 后生效；原配置已自动备份。`,
+      workBuddyRemovedHint: (agent: string) => `已移除；重启 ${agent} 后彻底停止上报。`,
       workBuddyEventDir: "事件目录",
       workBuddyOpenDir: "打开目录",
       workBuddyShowOnPet: "在桌宠查看",
@@ -709,7 +710,7 @@ export const I18N = {
       workBuddyNotInstalled: "Not connected",
       workBuddyInstall: "Connect WorkBuddy",
       workBuddyConnect: "Connect",
-      workBuddyInstallHint: "Not connected — click Connect to install the hooks",
+      workBuddyInstallHint: (agent: string) => `${agent} is not connected — click Connect`,
       workBuddyUnsupported: "Needs plugin",
       workBuddyDshReadyHint: "Cordis bridge plugin installed; restart DeepSeek Harness to take effect.",
       workBuddyDshHint: "DeepSeek Harness has no hook config — install the bridge plugin (see README)",
@@ -762,8 +763,10 @@ export const I18N = {
       wbSwitchHint:
         "Balance is the account total; the date is only when the earliest batch expires — the API doesn't say how much, so reminders just say credits are expiring.",
       workBuddyRemove: "Disconnect",
-      workBuddyRestartHint:
-        "Restart WorkBuddy to take effect. The previous config is backed up.",
+      workBuddyRestartHint: (agent: string) =>
+        `Restart ${agent} to take effect. The previous config is backed up.`,
+      workBuddyRemovedHint: (agent: string) =>
+        `Removed — restart ${agent} to stop reporting entirely.`,
       workBuddyEventDir: "Event Folder",
       workBuddyOpenDir: "Open Folder",
       workBuddyShowOnPet: "Show on Pet",

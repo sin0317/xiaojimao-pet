@@ -662,6 +662,8 @@ export function SettingsView(): JSX.Element {
     { workbuddy: null, qoder: null, trae: null }
   );
   const [wbSwitch, setWbSwitch] = useState<WbSwitchSnapshot | null>(null);
+  /** 刚移除接入的 agent：提示要重启对应客户端才会彻底停下 */
+  const [removedAgents, setRemovedAgents] = useState<Partial<Record<AgentHookTarget, boolean>>>({});
   const [wbBusy, setWbBusy] = useState(false);
   const [redetecting, setRedetecting] = useState(false);
 
@@ -840,6 +842,9 @@ export function SettingsView(): JSX.Element {
     try {
       const result = await window.pawpal.installWorkBuddyHooks(target);
       setWorkBuddyError(result?.error ?? null);
+      if (!result?.error) {
+        setRemovedAgents((current) => ({ ...current, [target]: false }));
+      }
     } finally {
       setWorkBuddyBusy(null);
     }
@@ -851,6 +856,9 @@ export function SettingsView(): JSX.Element {
     try {
       const result = await window.pawpal.removeWorkBuddyHooks(target);
       setWorkBuddyError(result?.error ?? null);
+      if (!result?.error) {
+        setRemovedAgents((current) => ({ ...current, [target]: true }));
+      }
     } finally {
       setWorkBuddyBusy(null);
     }
@@ -1272,7 +1280,11 @@ export function SettingsView(): JSX.Element {
                 label={item.label}
                 hint={
                   item.error ??
-                  (item.installed ? labels.workBuddyRestartHint : labels.workBuddyInstallHint)
+                  (item.installed
+                    ? labels.workBuddyRestartHint(item.label)
+                    : removedAgents[item.id]
+                      ? labels.workBuddyRemovedHint(item.label)
+                      : labels.workBuddyInstallHint(item.label))
                 }
                 control={
                   <div className="pref-button-group">
