@@ -23,10 +23,10 @@
 
 ## 它长这样
 
-| 任务中 | 等你选 |
-| --- | --- |
-| ![任务中](docs/screenshots/task-running.png) | ![等你选](docs/screenshots/needs-input.png) |
-| 狗在写字，右下角挂着「距下班 02:23 · 今日 ¥112」 | 狗戴上帽子举手，气泡问你要不要点确认 |
+| 任务中 | 等你选 | 几个 agent 一起跑 |
+| --- | --- | --- |
+| ![任务中](docs/screenshots/task-running.png) | ![等你选](docs/screenshots/needs-input.png) | ![多 agent](docs/screenshots/multi-agent.png) |
+| 狗在写字，右下角挂着「距下班 02:23 · 今日 ¥112」 | 狗戴上帽子举手，气泡问你要不要点确认 | 每只 agent 一张卡片叠在头顶，最需要你的那张贴着狗 |
 
 ## 功能
 
@@ -48,7 +48,8 @@
 | 等你选 | 橙红任务牌 + 狗子举手 + 气泡与系统通知 | `Notification`、`PreToolUse`（AskUserQuestion / ExitPlanMode） |
 | 已完成 | 绿牌 + 狗子跳两下 + 完成气泡 | `Stop`、`FinalStop` |
 
-多开、多 agent 并行时按「等你选 > 任务中 > 已完成」取最需要你看的那个，任务牌上显示次数。
+多开、多 agent 并行时按「等你选 > 任务中 > 已完成」排序，一个 agent 一张卡片叠在宠物头顶，
+最需要你的那张贴着狗；同一 agent 的多条会话折叠成 `×N`。最多同时显示 3 张。
 
 ### 陪伴
 

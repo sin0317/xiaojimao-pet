@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { JSX, PointerEvent } from "react";
+import type { CSSProperties, JSX, PointerEvent } from "react";
 import { i18n, resolveLanguage } from "../../../shared/i18n";
 import type { PetState, SpeechBubble } from "../../../shared/types";
 import type { WorkBuddyPhase, WorkBuddyStatus } from "../../../shared/workbuddy";
@@ -67,44 +67,53 @@ function workBadgeView(work: WorkSnapshot, nowMs: number, labels: WorkClockCopy)
   }
 }
 
-type WorkBuddyBadge = {
+type TaskChip = {
+  key: string;
   phase: WorkBuddyPhase;
   label: string;
   agent: string;
   project: string;
   title: string;
+  /** 同一个 agent 的多条会话折叠成一条，用 ×N 表示 */
   count: number;
 };
 
-function workBuddyBadgeView(
-  status: WorkBuddyStatus,
-  labels: WorkClockCopy
-): WorkBuddyBadge | null {
-  if (status.phase === "idle") return null;
+const PHASE_ORDER: Record<WorkBuddyPhase, number> = { needsInput: 0, running: 1, done: 2 };
 
-  const label =
-    status.phase === "running"
-      ? labels.workBuddyPhaseRunning
-      : status.phase === "needsInput"
-        ? labels.workBuddyPhaseNeedsInput
-        : labels.workBuddyPhaseDone;
-  const primary =
-    status.sessions.find((session) => session.phase === status.phase) ?? status.sessions[0];
-  const count =
-    status.phase === "needsInput"
-      ? status.needsInputCount
-      : status.phase === "running"
-        ? status.runningCount
-        : 0;
+function phaseLabelOf(phase: WorkBuddyPhase, labels: WorkClockCopy): string {
+  if (phase === "running") return labels.workBuddyPhaseRunning;
+  if (phase === "needsInput") return labels.workBuddyPhaseNeedsInput;
+  return labels.workBuddyPhaseDone;
+}
 
-  return {
-    phase: status.phase,
-    label,
-    agent: primary?.agent || "WorkBuddy",
-    project: primary?.project ?? "",
-    title: primary?.title ?? "",
-    count
-  };
+/** 多个 agent 同时跑时，按 agent 折叠成一组卡片，最需要你的排在最前面（贴近宠物） */
+function taskChipView(status: WorkBuddyStatus, labels: WorkClockCopy): TaskChip[] {
+  if (status.phase === "idle" || !status.sessions.length) return [];
+
+  const sorted = [...status.sessions].sort(
+    (a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || b.updatedAt - a.updatedAt
+  );
+
+  const byAgent = new Map<string, TaskChip>();
+  for (const session of sorted) {
+    const agent = session.agent || "WorkBuddy";
+    const existing = byAgent.get(agent);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    byAgent.set(agent, {
+      key: `${agent}-${session.id}`,
+      phase: session.phase,
+      label: phaseLabelOf(session.phase, labels),
+      agent,
+      project: session.project,
+      title: session.title,
+      count: 1
+    });
+  }
+
+  return [...byAgent.values()].slice(0, 3);
 }
 
 export function PetView(): JSX.Element {
@@ -123,9 +132,13 @@ export function PetView(): JSX.Element {
     ? computeWork(snapshot.settings, new Date(now))
     : null;
   const workClock = work ? workBadgeView(work, now, labels) : null;
-  const workBuddy = snapshot.settings.workBuddyEnabled
-    ? workBuddyBadgeView(snapshot.workBuddy, labels)
-    : null;
+  const taskChips = snapshot.settings.workBuddyEnabled
+    ? taskChipView(snapshot.workBuddy, labels)
+    : [];
+  // 卡片叠起来以后，气泡要跟着抬高：主卡 34 + 每张副卡 27 + 间距
+  const taskStackHeight = taskChips.length
+    ? 34 + (taskChips.length - 1) * 27
+    : 0;
 
   useEffect(() => {
     const offBubble = window.pawpal.onShowBubble(setBubble);
@@ -279,7 +292,8 @@ export function PetView(): JSX.Element {
 
   return (
     <main
-      className={`pet-shell${workBuddy ? " has-task-badge" : ""}`}
+      className={`pet-shell${taskChips.length ? " has-task-badge" : ""}`}
+      style={{ "--task-stack-height": `${taskStackHeight}px` } as CSSProperties}
       aria-label="PawPal desktop pet"
       onContextMenu={(event) => {
         event.preventDefault();
@@ -327,25 +341,34 @@ export function PetView(): JSX.Element {
         </div>
       ) : null}
 
-      {workBuddy ? (
-        <button
-          className={`task-badge task-badge--${workBuddy.phase}`}
-          onClick={() => window.pawpal.showWorkBuddyStatus()}
-          title={[workBuddy.project, workBuddy.title].filter(Boolean).join(" · ") || workBuddy.label}
-          type="button"
-        >
-          <span className="task-badge__dot" aria-hidden="true" />
-          <span className="task-badge__text">
-            <span className="task-badge__label">
-              {workBuddy.label}
-              {workBuddy.count > 1 ? <em>×{workBuddy.count}</em> : null}
-            </span>
-            <span className="task-badge__project">{workBuddy.agent}</span>
-          </span>
-        </button>
+      {taskChips.length ? (
+        <div className="task-stack">
+          {taskChips.map((chip, index) => (
+            <button
+              key={chip.key}
+              className={`task-badge task-badge--${chip.phase}${
+                index > 0 ? " task-badge--secondary" : ""
+              }`}
+              onClick={() => window.pawpal.showWorkBuddyStatus()}
+              title={
+                [chip.agent, chip.project, chip.title].filter(Boolean).join(" · ") || chip.label
+              }
+              type="button"
+            >
+              <span className="task-badge__dot" aria-hidden="true" />
+              <span className="task-badge__text">
+                <span className="task-badge__label">
+                  {chip.label}
+                  {chip.count > 1 ? <em>×{chip.count}</em> : null}
+                </span>
+                <span className="task-badge__project">{chip.agent}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       ) : null}
 
-      <div className={`pet-stage${workBuddy ? ` task-${workBuddy.phase}` : ""}`}>
+      <div className={`pet-stage${taskChips.length ? ` task-${taskChips[0].phase}` : ""}`}>
         <button
           className={`pet-button state-${state} ${facingClass} ${
             asset.isPlaceholder ? "placeholder-asset" : ""

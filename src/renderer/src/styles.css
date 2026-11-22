@@ -262,34 +262,100 @@ textarea {
   filter: drop-shadow(0 0 12px rgba(47, 125, 92, 0.35));
 }
 
+/* 多 agent 同时跑时的卡片栈：主卡贴近宠物，其余往上叠 */
+.task-stack {
+  align-items: center;
+  bottom: 132px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 5px;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.task-stack .task-badge {
+  pointer-events: auto;
+}
+
 .task-badge {
   align-items: center;
+  animation: task-chip-in 0.18s ease-out both;
   background: rgba(255, 252, 244, 0.96);
   border: 1px solid rgba(182, 125, 58, 0.28);
   border-radius: 11px;
-  bottom: 132px;
   box-shadow: 0 6px 16px rgba(45, 38, 31, 0.14);
   color: #a86a33;
   cursor: pointer;
   display: flex;
   gap: 6px;
-  left: 50%;
   max-width: 190px;
   padding: 5px 9px;
-  pointer-events: auto;
-  position: absolute;
   text-align: left;
-  transform: translateX(-50%);
   transition:
     border-color 0.2s ease,
     color 0.2s ease,
     background 0.2s ease;
-  z-index: 3;
+}
+
+/* 副卡收成一条：状态 · agent，横向排，既分得清是谁又不占高度 */
+.task-badge--secondary {
+  animation-delay: 0.04s;
+  border-radius: 9px;
+  box-shadow: 0 3px 10px rgba(45, 38, 31, 0.1);
+  opacity: 0.9;
+  padding: 3px 8px;
+}
+
+.task-badge--secondary .task-badge__text {
+  align-items: baseline;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  min-width: 0;
+}
+
+.task-badge--secondary .task-badge__project {
+  color: #8d7f6c;
+  display: inline;
+  flex: 1 1 auto;
+  font-size: 9px;
+  max-width: 108px;
+  min-width: 0;
+}
+
+.task-badge--secondary .task-badge__project::before {
+  content: "· ";
+}
+
+.task-badge--secondary .task-badge__label {
+  flex: none;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+@keyframes task-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-badge {
+    animation: none;
+  }
 }
 
 /* 任务牌常驻在宠物头顶正上方，气泡再往上叠一层 */
 .pet-shell.has-task-badge .speech-bubble {
-  bottom: 176px;
+  bottom: calc(132px + var(--task-stack-height, 34px) + 10px);
 }
 
 .task-badge__dot {
