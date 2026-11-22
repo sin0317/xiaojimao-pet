@@ -54,13 +54,16 @@ export const tests = [
   {
     name: "qoder and trae use their own config files and PowerShell",
     run(): void {
+      // CI 跑在 Linux 上，路径分隔符要归一化后再断言
+      const normalize = (value: string): string => value.replace(/\\/g, "/");
+
       const qoder = agentHookPaths("qoder", "C:\\Users\\sin");
-      assert.ok(qoder.settingsPath.endsWith(".qoder\\settings.json"));
+      assert.ok(normalize(qoder.settingsPath).endsWith("/.qoder/settings.json"));
       assert.ok(qoder.hookCommand.startsWith("powershell"));
       assert.ok(qoder.hookCommand.includes("xiaojimao-status.ps1"));
 
       const trae = agentHookPaths("trae", "C:\\Users\\sin");
-      assert.ok(trae.settingsPath.endsWith(".trae-cn\\hooks.json"));
+      assert.ok(normalize(trae.settingsPath).endsWith("/.trae-cn/hooks.json"));
       assert.ok(trae.scriptPath.endsWith("xiaojimao-status.ps1"));
     }
   },
