@@ -29,6 +29,7 @@ import {
   creditReminderKey,
   toDateInputValue
 } from "../shared/credits";
+import { syncWbSwitchAccounts, type WbSwitchAccount } from "./wbSwitch";
 import {
   createDeviceSession,
   fetchQoderCredits,
@@ -164,6 +165,8 @@ type StoreSchema = {
     updatedAt: number;
   };
   qoderMachineId?: string;
+  /** workbuddy-switch 多账号的积分快照（不含 token） */
+  wbSwitchAccounts?: { updatedAt: number; accounts: WbSwitchAccount[] };
 };
 
 type PetPosition = {
@@ -371,8 +374,30 @@ async function refreshWorkBuddyCredits(): Promise<void> {
   }
 }
 
-/* ---------------------------- Qoder 设备授权 ---------------------------- */
+/* ---------------------- workbuddy-switch 多账号同步 ---------------------- */
 
+/**
+ * 一次读完 wb-switch 里的所有账号。token 只在内存里用一次，不落盘。
+ * 提醒仍然只用「最快到期的那一个账号」喂给 creditAlerts，避免一次弹五个气泡。
+ */
+async function syncWbSwitch(): Promise<{ updatedAt: number; accounts: WbSwitchAccount[] }> {
+  const accounts = await syncWbSwitchAccounts();
+  const snapshot = { updatedAt: Date.now(), accounts };
+  store.set("wbSwitchAccounts", snapshot);
+
+  const soonest = accounts.find((item) => item.remaining > 0 && item.expiresAt) ?? null;
+  if (soonest?.expiresAt) {
+    applyCreditsToSettings("workbuddy", {
+      remaining: soonest.remaining,
+      expiresAt: soonest.expiresAt
+    });
+  }
+
+  publishSnapshot();
+  return snapshot;
+}
+
+/* ---------------------------- Qoder 设备授权 ---------------------------- */
 let qoderStatus: WorkBuddyLinkStatus = {
   state: "idle",
   message: "",
@@ -2164,6 +2189,8 @@ function registerIpc(): void {
     };
     return qoderStatus;
   });
+  ipcMain.handle("wbswitch:sync", () => syncWbSwitch());
+  ipcMain.handle("wbswitch:status", () => store.get("wbSwitchAccounts") ?? null);
   ipcMain.handle("clipboard:write", (_event, text: unknown) => {
     clipboard.writeText(String(text ?? ""));
     return true;
@@ -2195,6 +2222,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.whenReady().then(() => {
+
   protocol.handle("pawpal-asset", (request) => {
     let relativePath = "";
     try {

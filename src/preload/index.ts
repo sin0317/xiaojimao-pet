@@ -11,6 +11,7 @@ import type {
   SpeechBubble,
   TodayStats,
   UpdateCheckResult,
+  WbSwitchSnapshot,
   WorkBuddyLinkStatus
 } from "../shared/types";
 
@@ -73,6 +74,9 @@ const api = {
     ipcRenderer.invoke("qoder:link-refresh"),
   clearQoderLink: (): Promise<WorkBuddyLinkStatus> =>
     ipcRenderer.invoke("qoder:link-clear"),
+  syncWbSwitch: (): Promise<WbSwitchSnapshot> => ipcRenderer.invoke("wbswitch:sync"),
+  getWbSwitchStatus: (): Promise<WbSwitchSnapshot | null> =>
+    ipcRenderer.invoke("wbswitch:status"),
   writeClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke("clipboard:write", text),
   onPetState: (callback: (state: PetState) => void): Unsubscribe =>
     onChannel("pet:set-state", callback),

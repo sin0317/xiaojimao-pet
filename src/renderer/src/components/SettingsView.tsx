@@ -24,6 +24,7 @@ import type {
   PetState,
   Settings,
   UpdateCheckResult,
+  WbSwitchSnapshot,
   WorkBuddyLinkStatus
 } from "../../../shared/types";
 import { getPetAsset } from "../assets";
@@ -451,6 +452,11 @@ function customPetStateKindClass(state: PetState): string {
   return REQUIRED_CUSTOM_PET_STATES.includes(state) ? " is-required" : "";
 }
 
+function formatShortDate(ms: number): string {
+  const date = new Date(ms);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 function LinkRow({
   status,
   labels,
@@ -654,6 +660,21 @@ export function SettingsView(): JSX.Element {
   const [linkStatuses, setLinkStatuses] = useState<Record<CreditAgentId, WorkBuddyLinkStatus | null>>(
     { workbuddy: null, qoder: null, trae: null }
   );
+  const [wbSwitch, setWbSwitch] = useState<WbSwitchSnapshot | null>(null);
+  const [wbBusy, setWbBusy] = useState(false);
+
+  useEffect(() => {
+    void window.pawpal.getWbSwitchStatus().then(setWbSwitch);
+  }, []);
+
+  async function syncWbSwitchAccounts(): Promise<void> {
+    setWbBusy(true);
+    try {
+      setWbSwitch(await window.pawpal.syncWbSwitch());
+    } finally {
+      setWbBusy(false);
+    }
+  }
 
   useEffect(() => {
     void window.pawpal.getWorkBuddyLinkStatus().then((status) => {
@@ -1339,6 +1360,47 @@ export function SettingsView(): JSX.Element {
                 onRefresh={() => void refreshCreditLink(alert.agentId)}
                 onClear={() => void clearCreditLink(alert.agentId)}
               />
+            ) : null}
+            {alert.agentId === "workbuddy" ? (
+              <>
+                <div className="credit-link">
+                  <button
+                    type="button"
+                    className="pref-button"
+                    disabled={wbBusy}
+                    onClick={() => void syncWbSwitchAccounts()}
+                  >
+                    {wbBusy ? labels.wbSwitchSyncing : labels.wbSwitchSync}
+                  </button>
+                  {wbSwitch ? (
+                    <span className="credit-link__status">
+                      {labels.wbSwitchCount(wbSwitch.accounts.length)} ·{" "}
+                      {labels.wbSwitchUpdated(
+                        new Intl.DateTimeFormat("zh-CN", {
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        }).format(new Date(wbSwitch.updatedAt))
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+                {wbSwitch ? (
+                  <ul className="wb-list">
+                    {wbSwitch.accounts.map((account) => (
+                      <li key={account.id} className={account.error ? "is-error" : ""}>
+                        <span className="wb-list__name">{account.nickname}</span>
+                        <span className="wb-list__credit">
+                          {account.error
+                            ? account.error
+                            : `${account.remaining} · ${
+                                account.expiresAt ? formatShortDate(account.expiresAt) : "—"
+                              }`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
             ) : null}
           </div>
         ))}

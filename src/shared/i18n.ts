@@ -330,6 +330,12 @@ export const I18N = {
       creditLinkSyncedAt: (time: string) => `${time} 更新`,
       creditLinkHint:
         "扫码走 WorkBuddy 官方登录，凭证用系统加密保存在本机，只在抓积分时用；随时可以断开。",
+      wbSwitchSync: "从 workbuddy-switch 同步",
+      wbSwitchSyncing: "同步中…",
+      wbSwitchCount: (n: number) => `${n} 个账号`,
+      wbSwitchUpdated: (time: string) => `${time} 同步`,
+      wbSwitchEmpty: "没找到 ~/.wb-switch/accounts.json",
+      wbSwitchNoToken: "读不到账号，先确认 workbuddy-switch 里有登录过的账号",
       workBuddyRemove: "移除接入",
       workBuddyRestartHint: "重启 WorkBuddy 后生效；原配置已自动备份。",
       workBuddyEventDir: "事件目录",
@@ -732,6 +738,12 @@ export const I18N = {
       creditLinkSyncedAt: (time: string) => `updated ${time}`,
       creditLinkHint:
         "Uses WorkBuddy's official login. The credential is stored encrypted on this machine and only used to read credits; you can disconnect anytime.",
+      wbSwitchSync: "Sync from workbuddy-switch",
+      wbSwitchSyncing: "Syncing…",
+      wbSwitchCount: (n: number) => `${n} accounts`,
+      wbSwitchUpdated: (time: string) => `synced ${time}`,
+      wbSwitchEmpty: "No ~/.wb-switch/accounts.json found",
+      wbSwitchNoToken: "No accounts found — make sure workbuddy-switch has logged-in accounts",
       workBuddyRemove: "Disconnect",
       workBuddyRestartHint:
         "Restart WorkBuddy to take effect. The previous config is backed up.",

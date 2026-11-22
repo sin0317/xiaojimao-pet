@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   creditDaysLeft,
   normalizeTimestampMs,
+  parsePackageGrants,
   parseQoderUsage,
   parseResourceSummary,
   creditReminderKey,
@@ -145,6 +146,24 @@ export const tests = [
       assert.equal(normalizeTimestampMs(1_800_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs(1_800_000_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs("2026-11-30"), new Date("2026-11-30").getTime());
+    }
+  },
+  {
+    name: "grants: 只认生效中的发放，取最早到期",
+    run(): void {
+      const parsed = parsePackageGrants({
+        data: {
+          Accounts: [
+            { Status: 3, CycleEndTime: "2026-11-23 10:00:00" },
+            { Status: 0, CycleEndTime: "2026-11-30 23:59:59" },
+            { Status: 0, CycleEndTime: "2026-12-05 08:00:00" },
+            { Status: 0, CycleEndTime: "2027-11-13 23:00:00" }
+          ]
+        }
+      });
+      assert.ok(parsed?.expiresAt);
+      assert.equal(new Date(parsed.expiresAt).getDate(), 30);
+      assert.equal(new Date(parsed.expiresAt).getMonth(), 10);
     }
   },
   {

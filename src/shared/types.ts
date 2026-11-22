@@ -45,6 +45,22 @@ export type Diagnostics = {
   agents: AgentDiagnostics[];
 };
 
+/** workbuddy-switch 里一个账号的积分快照（不含 token） */
+export type WbSwitchAccount = {
+  id: string;
+  nickname: string;
+  email: string;
+  remaining: number;
+  total: number;
+  expiresAt: number | null;
+  error: string | null;
+};
+
+export type WbSwitchSnapshot = {
+  updatedAt: number;
+  accounts: WbSwitchAccount[];
+};
+
 /** WorkBuddy 扫码取数的状态（只暴露昵称和余额，token 永远不出主进程） */
 export type WorkBuddyLinkStatus = {
   state: "idle" | "waiting" | "success" | "error";

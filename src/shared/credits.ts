@@ -205,6 +205,37 @@ export function parseResourceSummary(raw: unknown, now = Date.now()): WorkBuddyC
   if (!root) return null;
   const data = asRecord(root.data) ?? root;
 
+  // 这个接口把明细放在 CreditGroups 里，顶层没有 CycleRemainCapacity
+  const groups = Array.isArray(data.CreditGroups)
+    ? data.CreditGroups
+    : Array.isArray(data.creditGroups)
+      ? data.creditGroups
+      : null;
+
+  if (groups) {
+    let remaining = 0;
+    let total = 0;
+    for (const entry of groups) {
+      const item = asRecord(entry);
+      if (!item) continue;
+      remaining +=
+        firstNumber(item, [
+          "CycleRemainCapacity",
+          "CycleCapacityRemainPrecise",
+          "CycleCapacityRemain"
+        ]) ?? 0;
+      total +=
+        firstNumber(item, ["CycleTotalCapacity", "CycleCapacitySizePrecise", "CycleCapacitySize"]) ??
+        0;
+    }
+    // 有 CreditGroups 就以它为准；即使全是 0 也算「读到了」，不要退回按字段猜
+    return {
+      remaining: Math.round(remaining),
+      total: Math.round(total || remaining),
+      expiresAt: null
+    };
+  }
+
   const remaining = firstNumber(data, REMAINING_KEYS);
   const total = firstNumber(data, TOTAL_KEYS);
   const used = firstNumber(data, USED_KEYS);
@@ -224,6 +255,63 @@ export function parseResourceSummary(raw: unknown, now = Date.now()): WorkBuddyC
   return {
     remaining: Math.round(remainingValue),
     total: Math.round(totalValue),
+    expiresAt
+  };
+}
+
+/**
+ * 解析积分包的发放明细（`get-user-resource-free-packages` 的 data.Accounts）。
+ * 每一笔发放都有剩余量和到期时间：
+ *  - 余额 = 所有发放的剩余量之和
+ *  - 到期 = 还有剩余的那些里最早的一个（这才是「最近要过期的积分」）
+ */
+export function parsePackageGrants(raw: unknown, now = Date.now()): WorkBuddyCredits | null {
+  const root = asRecord(raw);
+  if (!root) return null;
+  const data = asRecord(root.data) ?? root;
+  const list = Array.isArray(data.Accounts)
+    ? data.Accounts
+    : Array.isArray(data.accounts)
+      ? data.accounts
+      : null;
+  if (!list) return null;
+
+  let remaining = 0;
+  let total = 0;
+  let expiresAt: number | null = null;
+
+  for (const entry of list) {
+    const item = asRecord(entry);
+    if (!item) continue;
+    const remain =
+      firstNumber(item, [
+        "CapacityRemainPrecise",
+        "CapacityRemain",
+        "CycleCapacityRemainPrecise",
+        "CycleCapacityRemain"
+      ]) ?? 0;
+    const size =
+      firstNumber(item, [
+        "CapacitySizePrecise",
+        "CapacitySize",
+        "CycleCapacitySizePrecise",
+        "CycleCapacitySize"
+      ]) ?? 0;
+
+    remaining += remain;
+    total += size;
+
+    // 发放明细里的剩余量常年是 0（真实余额在 summary 里），所以到期只看「还在生效」的那批
+    const status = typeof item.Status === "number" ? item.Status : 0;
+    if (status !== 0) continue;
+    const end = firstTimestamp(item, ["CycleEndTime", "DeductionEndTime", "ExpiredTime"]);
+    if (end === null || end <= now || end - now > FAR_FUTURE_MS) continue;
+    if (expiresAt === null || end < expiresAt) expiresAt = end;
+  }
+
+  return {
+    remaining: Math.round(remaining),
+    total: Math.round(total || remaining),
     expiresAt
   };
 }
