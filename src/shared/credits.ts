@@ -201,6 +201,8 @@ export type WorkBuddyCredits = {
   remaining: number;
   total: number;
   expiresAt: number | null;
+  /** 套餐每月给的额度（plan_base），重置日到底给多少就看这个 */
+  planQuota?: number | null;
 };
 
 /**
@@ -222,6 +224,7 @@ export function parseResourceSummary(raw: unknown, now = Date.now()): WorkBuddyC
   if (groups) {
     let remaining = 0;
     let total = 0;
+    let planQuota: number | null = null;
     for (const entry of groups) {
       const item = asRecord(entry);
       if (!item) continue;
@@ -231,15 +234,18 @@ export function parseResourceSummary(raw: unknown, now = Date.now()): WorkBuddyC
           "CycleCapacityRemainPrecise",
           "CycleCapacityRemain"
         ]) ?? 0;
-      total +=
+      const groupTotal =
         firstNumber(item, ["CycleTotalCapacity", "CycleCapacitySizePrecise", "CycleCapacitySize"]) ??
         0;
+      total += groupTotal;
+      if (String(item.Kind ?? "") === "plan_base" && groupTotal > 0) planQuota = groupTotal;
     }
     // 有 CreditGroups 就以它为准；即使全是 0 也算「读到了」，不要退回按字段猜
     return {
       remaining: Math.round(remaining),
       total: Math.round(total || remaining),
-      expiresAt: null
+      expiresAt: null,
+      planQuota: planQuota === null ? null : Math.round(planQuota)
     };
   }
 
@@ -359,21 +365,26 @@ export function parseQoderUsage(raw: unknown, now = Date.now()): WorkBuddyCredit
   const root = asRecord(raw);
   if (!root) return null;
   const usage = asRecord(root.qoderUsage) ?? root;
-  const buckets = ["userQuota", "addOnQuota", "orgResourcePackage"]
-    .map((key) => asRecord(usage[key]))
-    .filter((item): item is Record<string, unknown> => item !== null);
+  const buckets: Array<{ key: string; item: Record<string, unknown> }> = [];
+  for (const key of ["userQuota", "addOnQuota", "orgResourcePackage"]) {
+    const item = asRecord(usage[key]);
+    if (item) buckets.push({ key, item });
+  }
 
   if (!buckets.length) return null;
 
   let remaining = 0;
   let total = 0;
   let expiresAt: number | null = null;
+  let planQuota: number | null = null;
 
-  for (const bucket of buckets) {
-    remaining += quotaRemaining(bucket);
-    total += firstNumber(bucket, ["total", "quota", "limit"]) ?? 0;
+  for (const { key, item } of buckets) {
+    remaining += quotaRemaining(item);
+    const bucketTotal = firstNumber(item, ["total", "quota", "limit"]) ?? 0;
+    total += bucketTotal;
+    if (key === "userQuota" && bucketTotal > 0) planQuota = bucketTotal;
 
-    const expiry = firstTimestamp(bucket, QODER_EXPIRY_KEYS);
+    const expiry = firstTimestamp(item, QODER_EXPIRY_KEYS);
     if (expiry !== null && expiry > now && expiry - now < FAR_FUTURE_MS) {
       if (expiresAt === null || expiry < expiresAt) expiresAt = expiry;
     }
@@ -382,6 +393,7 @@ export function parseQoderUsage(raw: unknown, now = Date.now()): WorkBuddyCredit
   return {
     remaining: Math.round(remaining),
     total: Math.round(total || remaining),
-    expiresAt
+    expiresAt,
+    planQuota: planQuota === null ? null : Math.round(planQuota)
   };
 }

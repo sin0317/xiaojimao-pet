@@ -87,7 +87,7 @@ export async function fetchAccountCredits(account: {
   token: string;
   uid: string;
   domain: string;
-}): Promise<{ remaining: number; total: number; expiresAt: number | null }> {
+}): Promise<{ remaining: number; total: number; expiresAt: number | null; planQuota: number | null }> {
   const summary = await postJson("/billing/meter/get-user-resource-summary", account, {});
   const balance = parseResourceSummary(summary);
   if (!balance) throw new Error("接口没返回积分");
@@ -105,7 +105,12 @@ export async function fetchAccountCredits(account: {
     if (parsed?.expiresAt) expiresAt = parsed.expiresAt;
   }
 
-  return { remaining: balance.remaining, total: balance.total, expiresAt };
+  return {
+    remaining: balance.remaining,
+    total: balance.total,
+    expiresAt,
+    planQuota: balance.planQuota ?? null
+  };
 }
 
 function extractPackageCodes(summary: unknown): string[] {
@@ -134,6 +139,7 @@ export async function syncWbSwitchAccounts(): Promise<WbSwitchAccount[]> {
             email: account.email,
             remaining: credits.remaining,
             total: credits.total,
+            planQuota: credits.planQuota ?? null,
             expiresAt: credits.expiresAt,
             error: null
           } satisfies WbSwitchAccount;

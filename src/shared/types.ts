@@ -52,6 +52,7 @@ export type WbSwitchAccount = {
   email: string;
   remaining: number;
   total: number;
+  planQuota?: number | null;
   expiresAt: number | null;
   error: string | null;
 };

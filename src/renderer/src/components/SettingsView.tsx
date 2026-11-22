@@ -585,7 +585,7 @@ function CreditRow({
             type="number"
             min={1}
             max={31}
-            placeholder="—"
+            placeholder="几号"
             value={alert.resetDay ?? ""}
             onChange={(event) =>
               onChange({ resetDay: event.target.value === "" ? null : Number(event.target.value) })
@@ -1422,9 +1422,13 @@ export function SettingsView(): JSX.Element {
                         <span className="wb-list__credit">
                           {account.error
                             ? account.error
-                            : `余额 ${account.remaining} · ${
-                                account.expiresAt ? formatShortDate(account.expiresAt) : "—"
-                              } 到期`}
+                            : [
+                                `余额 ${account.remaining}`,
+                                account.planQuota ? `套餐 ${account.planQuota}/月` : null,
+                                `${account.expiresAt ? formatShortDate(account.expiresAt) : "—"} 到期`
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                         </span>
                       </li>
                     ))}
