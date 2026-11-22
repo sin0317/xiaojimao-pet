@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX, PointerEvent } from "react";
 import { i18n, resolveLanguage } from "../../../shared/i18n";
+import { groupTaskChips } from "../../../shared/taskChips";
 import type { PetState, SpeechBubble } from "../../../shared/types";
 import type { WorkBuddyPhase, WorkBuddyStatus } from "../../../shared/workbuddy";
 import { computeWork, formatCountdown, type WorkSnapshot } from "../../../shared/workClock";
@@ -90,30 +91,15 @@ function phaseLabelOf(phase: WorkBuddyPhase, labels: WorkClockCopy): string {
 function taskChipView(status: WorkBuddyStatus, labels: WorkClockCopy): TaskChip[] {
   if (status.phase === "idle" || !status.sessions.length) return [];
 
-  const sorted = [...status.sessions].sort(
-    (a, b) => PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase] || b.updatedAt - a.updatedAt
-  );
-
-  const byAgent = new Map<string, TaskChip>();
-  for (const session of sorted) {
-    const agent = session.agent || "WorkBuddy";
-    const existing = byAgent.get(agent);
-    if (existing) {
-      existing.count += 1;
-      continue;
-    }
-    byAgent.set(agent, {
-      key: `${agent}-${session.id}`,
-      phase: session.phase,
-      label: phaseLabelOf(session.phase, labels),
-      agent,
-      project: session.project,
-      title: session.title,
-      count: 1
-    });
-  }
-
-  return [...byAgent.values()].slice(0, 3);
+  return groupTaskChips(status.sessions).map((group) => ({
+    key: group.key,
+    agent: group.agent,
+    phase: group.phase,
+    project: group.project,
+    title: group.title,
+    count: group.count,
+    label: phaseLabelOf(group.phase, labels)
+  }));
 }
 
 export function PetView(): JSX.Element {
