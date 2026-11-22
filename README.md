@@ -95,6 +95,19 @@ corepack pnpm@11.1.1 reicon
 NSIS 安装包由 `corepack pnpm@11.1.1 dist` 或 CI 的 release 流水线产出。
 改了代码后必须重跑这两步，桌面快捷方式才会打开新版。
 
+### 装到固定目录（可选）
+
+桌面快捷方式如果指向 `dist\win-unpacked`，清理构建产物时就会失效。建议把成品放到固定目录：
+
+```powershell
+# 首次
+robocopy "dist\win-unpacked" "D:\Software\小鸡毛桌宠" /E
+# 以后每次更新
+robocopy "dist\win-unpacked" "D:\Software\小鸡毛桌宠" /MIR
+```
+
+再把快捷方式指向 `D:\Software\小鸡毛桌宠\小鸡毛桌宠.exe`。
+
 ## 目录
 
 ```
