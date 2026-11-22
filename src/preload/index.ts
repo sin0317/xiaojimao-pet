@@ -65,6 +65,14 @@ const api = {
     ipcRenderer.invoke("workbuddy:link-refresh"),
   clearWorkBuddyLink: (): Promise<WorkBuddyLinkStatus> =>
     ipcRenderer.invoke("workbuddy:link-clear"),
+  startQoderLink: (): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke("qoder:link-start"),
+  getQoderLinkStatus: (): Promise<WorkBuddyLinkStatus> =>
+    ipcRenderer.invoke("qoder:link-status"),
+  refreshQoderLink: (): Promise<WorkBuddyLinkStatus> =>
+    ipcRenderer.invoke("qoder:link-refresh"),
+  clearQoderLink: (): Promise<WorkBuddyLinkStatus> =>
+    ipcRenderer.invoke("qoder:link-clear"),
   writeClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke("clipboard:write", text),
   onPetState: (callback: (state: PetState) => void): Unsubscribe =>
     onChannel("pet:set-state", callback),

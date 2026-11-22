@@ -15,6 +15,7 @@ import type {
   AgentDiagnostics,
   AgentHookTarget,
   BuiltInPetAppearanceId,
+  CreditAgentId,
   CreditAlert,
   CustomPetAppearance,
   CustomPetAsset,
@@ -450,6 +451,44 @@ function customPetStateKindClass(state: PetState): string {
   return REQUIRED_CUSTOM_PET_STATES.includes(state) ? " is-required" : "";
 }
 
+function LinkRow({
+  status,
+  labels,
+  onStart,
+  onRefresh,
+  onClear
+}: {
+  status: WorkBuddyLinkStatus | null;
+  labels: SettingsCopy;
+  onStart: () => void;
+  onRefresh: () => void;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <div className="credit-link">
+      <button
+        type="button"
+        className="pref-button"
+        disabled={status?.state === "waiting"}
+        onClick={onStart}
+      >
+        {formatLinkAction(status, labels)}
+      </button>
+      {status?.state === "success" ? (
+        <button type="button" className="pref-link" onClick={onRefresh}>
+          {labels.creditLinkRelink}
+        </button>
+      ) : null}
+      {status && status.state !== "idle" ? (
+        <button type="button" className="pref-link" onClick={onClear}>
+          {labels.creditLinkDisconnect}
+        </button>
+      ) : null}
+      <span className="credit-link__status">{formatLinkStatus(status, labels)}</span>
+    </div>
+  );
+}
+
 function formatLinkAction(status: WorkBuddyLinkStatus | null, labels: SettingsCopy): string {
   if (status?.state === "waiting") return labels.creditLinkWaiting;
   return status?.state === "success" ? labels.creditLinkRelink : labels.creditLink;
@@ -612,19 +651,70 @@ export function SettingsView(): JSX.Element {
   const [workBuddyBusy, setWorkBuddyBusy] = useState<AgentHookTarget | null>(null);
   const [agentDiag, setAgentDiag] = useState<Diagnostics | null>(null);
   const [diagCopied, setDiagCopied] = useState(false);
-  const [linkStatus, setLinkStatus] = useState<WorkBuddyLinkStatus | null>(null);
+  const [linkStatuses, setLinkStatuses] = useState<Record<CreditAgentId, WorkBuddyLinkStatus | null>>(
+    { workbuddy: null, qoder: null, trae: null }
+  );
 
   useEffect(() => {
-    void window.pawpal.getWorkBuddyLinkStatus().then(setLinkStatus);
+    void window.pawpal.getWorkBuddyLinkStatus().then((status) => {
+      setLinkStatuses((current) => ({ ...current, workbuddy: status }));
+    });
+    void window.pawpal.getQoderLinkStatus().then((status) => {
+      setLinkStatuses((current) => ({ ...current, qoder: status }));
+    });
   }, []);
 
   useEffect(() => {
-    if (linkStatus?.state !== "waiting") return;
+    const waiting = (["workbuddy", "qoder"] as const).filter(
+      (agent) => linkStatuses[agent]?.state === "waiting"
+    );
+    if (!waiting.length) return;
+
     const timer = window.setInterval(() => {
-      void window.pawpal.getWorkBuddyLinkStatus().then(setLinkStatus);
+      for (const agent of waiting) {
+        const fetchStatus =
+          agent === "workbuddy"
+            ? window.pawpal.getWorkBuddyLinkStatus()
+            : window.pawpal.getQoderLinkStatus();
+        void fetchStatus.then((status) => {
+          setLinkStatuses((current) => ({ ...current, [agent]: status }));
+        });
+      }
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [linkStatus?.state]);
+  }, [linkStatuses.workbuddy?.state, linkStatuses.qoder?.state]);
+
+  async function startCreditLink(agent: CreditAgentId): Promise<void> {
+    const call =
+      agent === "workbuddy"
+        ? window.pawpal.startWorkBuddyLink()
+        : agent === "qoder"
+          ? window.pawpal.startQoderLink()
+          : null;
+    if (!call) return;
+    await call;
+    const status =
+      agent === "workbuddy"
+        ? await window.pawpal.getWorkBuddyLinkStatus()
+        : await window.pawpal.getQoderLinkStatus();
+    setLinkStatuses((current) => ({ ...current, [agent]: status }));
+  }
+
+  async function refreshCreditLink(agent: CreditAgentId): Promise<void> {
+    const status =
+      agent === "workbuddy"
+        ? await window.pawpal.refreshWorkBuddyLink()
+        : await window.pawpal.refreshQoderLink();
+    setLinkStatuses((current) => ({ ...current, [agent]: status }));
+  }
+
+  async function clearCreditLink(agent: CreditAgentId): Promise<void> {
+    const status =
+      agent === "workbuddy"
+        ? await window.pawpal.clearWorkBuddyLink()
+        : await window.pawpal.clearQoderLink();
+    setLinkStatuses((current) => ({ ...current, [agent]: status }));
+  }
 
   useEffect(() => {
     if (!diagnosticsOpen) return;
@@ -1241,49 +1331,14 @@ export function SettingsView(): JSX.Element {
                 })
               }
             />
-            {alert.agentId === "workbuddy" ? (
-              <div className="credit-link">
-                <button
-                  type="button"
-                  className="pref-button"
-                  disabled={linkStatus?.state === "waiting"}
-                  onClick={() => {
-                    void (async () => {
-                      await window.pawpal.startWorkBuddyLink();
-                      setLinkStatus(await window.pawpal.getWorkBuddyLinkStatus());
-                    })();
-                  }}
-                >
-                  {formatLinkAction(linkStatus, labels)}
-                </button>
-                {linkStatus?.state === "success" ? (
-                  <button
-                    type="button"
-                    className="pref-link"
-                    onClick={() => {
-                      void (async () => {
-                        setLinkStatus(await window.pawpal.refreshWorkBuddyLink());
-                      })();
-                    }}
-                  >
-                    {labels.creditLinkRelink}
-                  </button>
-                ) : null}
-                {linkStatus && linkStatus.state !== "idle" ? (
-                  <button
-                    type="button"
-                    className="pref-link"
-                    onClick={() => {
-                      void (async () => {
-                        setLinkStatus(await window.pawpal.clearWorkBuddyLink());
-                      })();
-                    }}
-                  >
-                    {labels.creditLinkDisconnect}
-                  </button>
-                ) : null}
-                <span className="credit-link__status">{formatLinkStatus(linkStatus, labels)}</span>
-              </div>
+            {alert.agentId === "workbuddy" || alert.agentId === "qoder" ? (
+              <LinkRow
+                status={linkStatuses[alert.agentId] ?? null}
+                labels={labels}
+                onStart={() => void startCreditLink(alert.agentId)}
+                onRefresh={() => void refreshCreditLink(alert.agentId)}
+                onClear={() => void clearCreditLink(alert.agentId)}
+              />
             ) : null}
           </div>
         ))}

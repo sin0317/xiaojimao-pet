@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   creditDaysLeft,
   normalizeTimestampMs,
+  parseQoderUsage,
   parseResourceSummary,
   creditReminderKey,
   defaultCreditAlert,
@@ -144,6 +145,38 @@ export const tests = [
       assert.equal(normalizeTimestampMs(1_800_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs(1_800_000_000_000), 1_800_000_000_000);
       assert.equal(normalizeTimestampMs("2026-11-30"), new Date("2026-11-30").getTime());
+    }
+  },
+  {
+    name: "qoder: 套餐 + 资源包相加，到期取最近",
+    run(): void {
+      const parsed = parseQoderUsage({
+        qoderUsage: {
+          userQuota: { total: 2000, used: 500, remaining: 1500, expireAt: "2026-12-31" },
+          addOnQuota: { total: 700, used: 100, remaining: 600, expireAt: "2026-12-10" },
+          orgResourcePackage: null
+        }
+      });
+      assert.ok(parsed);
+      assert.equal(parsed.remaining, 2100);
+      assert.ok(parsed.expiresAt);
+      assert.equal(new Date(parsed.expiresAt!).getDate(), 10);
+    }
+  },
+  {
+    name: "qoder: 没有 remaining 时用 total-used 推",
+    run(): void {
+      const parsed = parseQoderUsage({ qoderUsage: { userQuota: { total: 100, used: 30 } } });
+      assert.ok(parsed);
+      assert.equal(parsed.remaining, 70);
+      assert.equal(parsed.expiresAt, null);
+    }
+  },
+  {
+    name: "qoder: 空返回是 null",
+    run(): void {
+      assert.equal(parseQoderUsage({}), null);
+      assert.equal(parseQoderUsage(null), null);
     }
   }
 ];

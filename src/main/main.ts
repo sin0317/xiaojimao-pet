@@ -30,6 +30,12 @@ import {
   toDateInputValue
 } from "../shared/credits";
 import {
+  createDeviceSession,
+  fetchQoderCredits,
+  newMachineId,
+  waitForDeviceLogin
+} from "./qoderLink";
+import {
   fetchCredits,
   sealToken,
   startLogin,
@@ -148,6 +154,16 @@ type StoreSchema = {
     expiresAt: number | null;
     updatedAt: number;
   };
+  /** Qoder 设备授权的凭证与机器标识 */
+  qoderLink?: {
+    tokenCipher: string;
+    refreshCipher: string | null;
+    uid: string | null;
+    name: string | null;
+    expiresAt: number | null;
+    updatedAt: number;
+  };
+  qoderMachineId?: string;
 };
 
 type PetPosition = {
@@ -242,10 +258,13 @@ function setLinkStatus(next: Partial<WorkBuddyLinkStatus>): void {
 }
 
 /** 把抓到的余额与到期日写回设置，提醒逻辑就不用改 */
-function applyCreditsToSettings(credits: { remaining: number; expiresAt: number | null }): void {
+function applyCreditsToSettings(
+  agentId: CreditAgentId,
+  credits: { remaining: number; expiresAt: number | null }
+): void {
   const settings = getSettings();
   const alerts = normalizeCreditAlerts(settings.creditAlerts).map((item) =>
-    item.agentId === "workbuddy"
+    item.agentId === agentId
       ? {
           ...item,
           balance: credits.remaining,
@@ -285,7 +304,7 @@ async function refreshWorkBuddyCredits(): Promise<void> {
     };
     const credits = await fetchCredits(account);
     if (!credits) throw new Error(labels.creditLinkEmpty);
-    applyCreditsToSettings(credits);
+    applyCreditsToSettings("workbuddy", credits);
     setLinkStatus({
       state: "success",
       message: "",
@@ -302,8 +321,7 @@ async function refreshWorkBuddyCredits(): Promise<void> {
   }
 }
 
-/** 打开浏览器走官方登录，后台轮询换 token；成功后立刻抓一次积分 */
-async function startWorkBuddyLink(): Promise<{ ok: boolean; message?: string }> {
+/** 打开浏览器走官方登录，后台轮询换 token；成功后立刻抓一次积分 */async function startWorkBuddyLink(): Promise<{ ok: boolean; message?: string }> {
   if (linkStatus.state === "waiting") return { ok: true };
   const labels = text().settings;
 
@@ -349,6 +367,115 @@ async function startWorkBuddyLink(): Promise<{ ok: boolean; message?: string }> 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setLinkStatus({ state: "error", message });
+    return { ok: false, message };
+  }
+}
+
+/* ---------------------------- Qoder 设备授权 ---------------------------- */
+
+let qoderStatus: WorkBuddyLinkStatus = {
+  state: "idle",
+  message: "",
+  nickname: null,
+  balance: null,
+  expiresAt: null,
+  updatedAt: null
+};
+let qoderAborted = false;
+
+function setQoderStatus(next: Partial<WorkBuddyLinkStatus>): void {
+  qoderStatus = { ...qoderStatus, ...next };
+  sendToAll("qoder:link-status", qoderStatus);
+}
+
+async function refreshQoderCredits(): Promise<void> {
+  const link = store.get("qoderLink");
+  if (!link) return;
+  const labels = text().settings;
+
+  if (link.expiresAt && link.expiresAt < Date.now()) {
+    setQoderStatus({ state: "error", message: labels.creditLinkExpired });
+    return;
+  }
+
+  const token = unsealToken(link.tokenCipher);
+  if (!token) {
+    setQoderStatus({ state: "error", message: labels.creditLinkUnavailable });
+    return;
+  }
+
+  try {
+    const credits = await fetchQoderCredits(token);
+    if (!credits) throw new Error(labels.creditLinkEmpty);
+    applyCreditsToSettings("qoder", credits);
+    setQoderStatus({
+      state: "success",
+      message: "",
+      nickname: link.name,
+      balance: credits.remaining,
+      expiresAt: credits.expiresAt,
+      updatedAt: Date.now()
+    });
+  } catch (error) {
+    setQoderStatus({
+      state: "error",
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+async function startQoderLink(): Promise<{ ok: boolean; message?: string }> {
+  if (qoderStatus.state === "waiting") return { ok: true };
+  const labels = text().settings;
+
+  try {
+    // 机器标识要稳定，否则上游会当成新设备（风控信号）
+    let machineId = store.get("qoderMachineId");
+    if (!machineId) {
+      machineId = newMachineId();
+      store.set("qoderMachineId", machineId);
+    }
+
+    const session = createDeviceSession(machineId);
+    qoderAborted = false;
+    setQoderStatus({ state: "waiting", message: labels.creditLinkWaiting });
+    await shell.openExternal(session.authUrl);
+
+    void (async () => {
+      try {
+        const account = await waitForDeviceLogin(session, () => qoderAborted);
+        if (!account) {
+          setQoderStatus({ state: "idle", message: labels.creditLinkTimeout });
+          return;
+        }
+
+        const tokenCipher = sealToken(account.token);
+        if (!tokenCipher) {
+          setQoderStatus({ state: "error", message: labels.creditLinkNoKeychain });
+          return;
+        }
+
+        store.set("qoderLink", {
+          tokenCipher,
+          refreshCipher: account.refreshToken ? sealToken(account.refreshToken) : null,
+          uid: account.uid,
+          name: account.name,
+          expiresAt: account.expiresAt,
+          updatedAt: Date.now()
+        });
+        await refreshQoderCredits();
+      } catch (error) {
+        setQoderStatus({
+          state: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    })();
+
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setQoderStatus({ state: "error", message });
     return { ok: false, message };
   }
 }
@@ -2017,6 +2144,26 @@ function registerIpc(): void {
     };
     return linkStatus;
   });
+
+  ipcMain.handle("qoder:link-start", () => startQoderLink());
+  ipcMain.handle("qoder:link-status", () => qoderStatus);
+  ipcMain.handle("qoder:link-refresh", async () => {
+    await refreshQoderCredits();
+    return qoderStatus;
+  });
+  ipcMain.handle("qoder:link-clear", () => {
+    store.delete("qoderLink");
+    qoderAborted = true;
+    qoderStatus = {
+      state: "idle",
+      message: "",
+      nickname: null,
+      balance: null,
+      expiresAt: null,
+      updatedAt: null
+    };
+    return qoderStatus;
+  });
   ipcMain.handle("clipboard:write", (_event, text: unknown) => {
     clipboard.writeText(String(text ?? ""));
     return true;
@@ -2098,6 +2245,16 @@ app.whenReady().then(() => {
       updatedAt: savedLink.updatedAt
     };
     setTimeout(() => void refreshWorkBuddyCredits(), 10_000);
+  }
+
+  const savedQoder = store.get("qoderLink");
+  if (savedQoder) {
+    qoderStatus = {
+      ...qoderStatus,
+      nickname: savedQoder.name,
+      updatedAt: savedQoder.updatedAt
+    };
+    setTimeout(() => void refreshQoderCredits(), 12_000);
   }
   if (IS_DEV) {
     createSettingsWindow();

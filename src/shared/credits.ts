@@ -235,3 +235,58 @@ export function toDateInputValue(ms: number): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+const QODER_EXPIRY_KEYS = [
+  "expireAt",
+  "expiredAt",
+  "expireTime",
+  "expiredTime",
+  "validUntil",
+  "endTime",
+  "quotaExpireAt",
+  "expire_at"
+];
+
+function quotaRemaining(quota: Record<string, unknown>): number {
+  const remaining = firstNumber(quota, ["remaining", "remain", "left"]);
+  if (remaining !== null) return Math.max(0, remaining);
+  const total = firstNumber(quota, ["total", "quota", "limit"]);
+  const used = firstNumber(quota, ["used", "usage", "consumed"]);
+  if (total !== null) return Math.max(0, total - (used ?? 0));
+  return 0;
+}
+
+/**
+ * Qoder `/sash/api/v2/me/usage`：套餐内 + 资源包 + 组织资源包三块要加在一起，
+ * 到期取最近的（签到攒的资源包通常 30 天先到期）。
+ */
+export function parseQoderUsage(raw: unknown, now = Date.now()): WorkBuddyCredits | null {
+  const root = asRecord(raw);
+  if (!root) return null;
+  const usage = asRecord(root.qoderUsage) ?? root;
+  const buckets = ["userQuota", "addOnQuota", "orgResourcePackage"]
+    .map((key) => asRecord(usage[key]))
+    .filter((item): item is Record<string, unknown> => item !== null);
+
+  if (!buckets.length) return null;
+
+  let remaining = 0;
+  let total = 0;
+  let expiresAt: number | null = null;
+
+  for (const bucket of buckets) {
+    remaining += quotaRemaining(bucket);
+    total += firstNumber(bucket, ["total", "quota", "limit"]) ?? 0;
+
+    const expiry = firstTimestamp(bucket, QODER_EXPIRY_KEYS);
+    if (expiry !== null && expiry > now && expiry - now < FAR_FUTURE_MS) {
+      if (expiresAt === null || expiry < expiresAt) expiresAt = expiry;
+    }
+  }
+
+  return {
+    remaining: Math.round(remaining),
+    total: Math.round(total || remaining),
+    expiresAt
+  };
+}
