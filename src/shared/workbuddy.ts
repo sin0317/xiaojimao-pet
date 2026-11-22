@@ -72,7 +72,12 @@ export type AgentIntegration = {
   checkedAt: number;
 };
 
-export const WORKBUDDY_NEEDS_INPUT_TTL_MS = 45 * 60 * 1000;
+export const WORKBUDDY_NEEDS_INPUT_TTL_MS = 10 * 60 * 1000;
+/**
+ * 「问完就停」的短窗口：只有在这个窗口内的 Stop 才算「用户还没回答」。
+ * 超过它再 Stop，说明中间已经处理过了，不能再挂「等你选」。
+ */
+export const WORKBUDDY_NEEDS_INPUT_LATCH_MS = 2 * 60 * 1000;
 export const WORKBUDDY_SESSION_TTL_MS = 3 * 60 * 60 * 1000;
 export const WORKBUDDY_DONE_TTL_MS = 30 * 60 * 1000;
 export const WORKBUDDY_MAX_SESSIONS = 5;
@@ -267,11 +272,27 @@ export function applyWorkBuddyEvents(
       continue;
     }
 
+    // 工具真的跑完了（或开始跑了）：说明刚才那个「等你选」已经被处理，
+    // 不能靠 45 分钟的 TTL 慢慢过期，否则选完之后徽标还挂着「等你选」
+    if (name === "PostToolUse" || name === "PreToolUse") {
+      next[id] = {
+        ...base,
+        agent: mergedAgent,
+        project: mergedProject,
+        phase: "running",
+        needsInputAt: null,
+        updatedAt: at
+      };
+      continue;
+    }
+
     if (name === "Stop" || name === "FinalStop") {
+      // 只在「刚问完就停」这个很短的窗口里保持等你选：
+      // 用户答完后模型继续跑、稍后才 Stop 的，不该再算「等你选」
       const latching =
         base.needsInputAt !== null &&
         at >= base.needsInputAt &&
-        at - base.needsInputAt < WORKBUDDY_NEEDS_INPUT_TTL_MS;
+        at - base.needsInputAt < WORKBUDDY_NEEDS_INPUT_LATCH_MS;
       const summary = summarizeMessage(asText(payload.last_assistant_message));
       next[id] = {
         ...base,

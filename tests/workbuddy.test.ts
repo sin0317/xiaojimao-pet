@@ -88,6 +88,34 @@ export const tests = [
     }
   },
   {
+    name: "工具一跑就清掉等选状态（选完之后不应该还挂着）",
+    run(): void {
+      const sessions = sessionsOf([
+        event("UserPromptSubmit", { prompt: "改配色" }, T0),
+        event("Notification", { notification_type: "permission_request" }, T0 + 1000),
+        event("PreToolUse", { tool_name: "AskUserQuestion" }, T0 + 2000),
+        event("PostToolUse", { tool_name: "AskUserQuestion" }, T0 + 4000)
+      ]);
+
+      assert.equal(sessions.s1.needsInputAt, null);
+      assert.equal(sessions.s1.phase, "running");
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 5000).phase, "running");
+    }
+  },
+  {
+    name: "答完过一会儿才 Stop，不该再算等你选",
+    run(): void {
+      const sessions = sessionsOf([
+        event("Notification", { notification_type: "permission_request" }, T0),
+        event("PostToolUse", { tool_name: "Bash" }, T0 + 3000),
+        event("Stop", { last_assistant_message: "改好了" }, T0 + 200_000)
+      ]);
+
+      assert.equal(sessions.s1.phase, "done");
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 210_000).phase, "done");
+    }
+  },
+  {
     name: "needsInput wins over running in the aggregate",
     run(): void {
       const sessions = applyWorkBuddyEvents(

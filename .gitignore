@@ -9,3 +9,9 @@ _raw_assets/
 _ref/
 CLAUDE.md
 docs/release.md
+
+# 打包临时产物（环境禁止批量删除，只能忽略）
+.app-new.asar
+.asar-stage-*/
+out-pkg-*/
+build-win/

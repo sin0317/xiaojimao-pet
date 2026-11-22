@@ -2028,14 +2028,36 @@ function triggerDemo(trigger: DemoTrigger): void {
   if (trigger === "happy") happyFeedback(pick(text().bubble.woof));
 }
 
-function handleBubbleAction(actionId: string): void {
-  if (actionId.startsWith("approval:")) {
+/** 已经在桌宠上替用户答了审批：该 agent 的「等你选」应当立刻消失 */
+function clearNeedsInputForAgent(agentLabel: string): void {
+  const target = agentLabel.trim().toLowerCase();
+  if (!target) return;
+
+  let changed = false;
+  const now = Date.now();
+  for (const [id, session] of Object.entries(workBuddySessions)) {
+    if ((session.agent || "").trim().toLowerCase() !== target) continue;
+    if (session.needsInputAt === null) continue;
+    workBuddySessions[id] = {
+      ...session,
+      needsInputAt: null,
+      phase: "running",
+      updatedAt: now
+    };
+    changed = true;
+  }
+  if (changed) applyWorkBuddyStatus(summarizeWorkBuddy(workBuddySessions, now));
+}
+
+function handleBubbleAction(actionId: string): void {  if (actionId.startsWith("approval:")) {
     const [, decision, id] = actionId.split(":");
     const approval = activeApproval;
     if (approval && approval.id === id && (decision === "allow" || decision === "deny")) {
       activeApproval = null;
       const dir = resolveApprovalDir();
       void writeApprovalAnswer(dir, id, decision).then(() => dropApprovalRequest(dir, id));
+      // 我已经替用户答了：对应 agent 的「等你选」应该立刻消失，而不是等下一个事件
+      clearNeedsInputForAgent(approval.agent);
       const labels = text();
       showBubble({
         id: "approval-ack",
