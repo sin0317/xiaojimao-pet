@@ -138,6 +138,9 @@ export const I18N = {
         const when = days <= 0 ? "今天" : `${days} 天后`;
         return `${agent} 有积分${when}到期，记得用掉`;
       },
+      todoReminder: (title: string, when: string) => `⏰ ${when}：${title}`,
+      todoReminderMore: (title: string, when: string, more: number) =>
+        `⏰ ${when}：${title}（还有 ${more} 条待办）`,
     },
     actions: {
       breakDone: "我站起来了",
@@ -344,6 +347,24 @@ export const I18N = {
       wbSwitchHint:
         "余额是账号总量；到期日只是最早那批积分的过期时间——具体那一刻过期多少，接口不提供，所以提醒里只写「有积分要到期」。",
       workBuddyRemove: "移除接入",
+      todos: "待办提醒",
+      todoEnable: "待办到点提醒",
+      todoEnableHint: "到点后桌宠弹气泡 + 系统通知；数据存在本机，重启不会丢。",
+      todoTitle: "事项",
+      todoTitlePlaceholder: "例如：提交报告",
+      todoDate: "日期",
+      todoTime: "时间",
+      todoAdd: "添加",
+      todoSave: "保存",
+      todoCancel: "取消",
+      todoEdit: "编辑",
+      todoDelete: "删除",
+      todoEmpty: "还没有待办，填一条试试",
+      todoOverdue: "已过时",
+      todoDoneLabel: "已完成",
+      todoNeedTitle: "先写点内容",
+      todoNeedTime: "日期或时间没填对",
+      todoCount: (n: number) => `${n} 条未完成`,
       workBuddyRestartHint: (agent: string) => `重启 ${agent} 后生效；原配置已自动备份。`,
       workBuddyRemovedHint: (agent: string) => `已移除；重启 ${agent} 后彻底停止上报。`,
       workBuddyEventDir: "事件目录",
@@ -552,6 +573,9 @@ export const I18N = {
         const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
         return `${agent} has credits expiring ${when} — go spend them`;
       },
+      todoReminder: (title: string, when: string) => `⏰ ${when}: ${title}`,
+      todoReminderMore: (title: string, when: string, more: number) =>
+        `⏰ ${when}: ${title} (+${more} more)`,
     },
     actions: {
       breakDone: "I stood up",
@@ -763,6 +787,25 @@ export const I18N = {
       wbSwitchHint:
         "Balance is the account total; the date is only when the earliest batch expires — the API doesn't say how much, so reminders just say credits are expiring.",
       workBuddyRemove: "Disconnect",
+      todos: "To-do reminders",
+      todoEnable: "Remind me when due",
+      todoEnableHint:
+        "A bubble plus a system notification when it's due. Stored locally, survives restarts.",
+      todoTitle: "Item",
+      todoTitlePlaceholder: "e.g. submit the report",
+      todoDate: "Date",
+      todoTime: "Time",
+      todoAdd: "Add",
+      todoSave: "Save",
+      todoCancel: "Cancel",
+      todoEdit: "Edit",
+      todoDelete: "Delete",
+      todoEmpty: "No to-dos yet — add one below",
+      todoOverdue: "Overdue",
+      todoDoneLabel: "Done",
+      todoNeedTitle: "Type something first",
+      todoNeedTime: "Check the date and time",
+      todoCount: (n: number) => `${n} open`,
       workBuddyRestartHint: (agent: string) =>
         `Restart ${agent} to take effect. The previous config is backed up.`,
       workBuddyRemovedHint: (agent: string) =>

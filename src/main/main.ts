@@ -82,6 +82,12 @@ import type {
   WorkBuddyLinkStatus
 } from "../shared/types";
 import {
+  dueTodos,
+  describeRemindAt,
+  visibleTodos,
+  type TodoItem
+} from "../shared/todos";
+import {
   APP_NAME,
   BREAK_RUN_TICK_MS,
   DISTRACTION_CHECK_INTERVAL_MS,
@@ -144,6 +150,8 @@ type StoreSchema = {
   statsHistory: StatsHistory;
   petPosition?: SavedWindowPosition;
   petHiddenByUser?: boolean;
+  /** 待办提醒：本地保存，重启不丢 */
+  todos?: TodoItem[];
   /** 积分提醒去重：agentId → 上次提醒的 key（含日期，一天一次） */
   creditReminders?: Record<string, string>;
   /** WorkBuddy 扫码登录拿到的凭证（token 已用 safeStorage 加密） */
@@ -540,6 +548,7 @@ function setSettings(next: Settings): void {
   scheduleReminderTimers();
   scheduleDistractionDetection();
   scheduleWorkBuddyBridge();
+  scheduleTodoCheck();
   if (fullscreenDetectionWasEnabled !== normalized.hideOnFullscreenEnabled) {
     configureFullscreenDetection();
   }
@@ -1301,6 +1310,71 @@ function scheduleReminderTimers(): void {
   scheduleBreakReminderTimer();
   scheduleHydrationReminderTimer();
   scheduleWorkReminders();
+}
+
+/* ------------------------------------------------------------------ *
+ * 待办提醒
+ * 数据存本地（electron-store），到点用气泡 + 系统通知提醒一次。
+ * ------------------------------------------------------------------ */
+
+const TODO_CHECK_INTERVAL_MS = 30 * 1000;
+let todoTimer: NodeJS.Timeout | null = null;
+
+function getTodos(): TodoItem[] {
+  return store.get("todos") ?? [];
+}
+
+function publishTodos(next: TodoItem[]): void {
+  const now = Date.now();
+  store.set("todos", next);
+  sendToAll("todos:changed", visibleTodos(next, now));
+  publishSnapshot();
+}
+
+function createTodoId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** 去掉首尾空白、压掉换行，限制长度；空的返回空串 */
+function normalizeTodoTitle(input: unknown): string {
+  return String(input ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+/** 每 30 秒扫一次：到点、没提醒过、没完成的，弹一次气泡 + 系统通知 */
+function checkTodoReminders(): void {
+  const now = Date.now();
+  const todos = getTodos();
+  const due = dueTodos(todos, now);
+  if (!due.length) return;
+
+  const dueIds = new Set(due.map((todo) => todo.id));
+  publishTodos(
+    todos.map((todo) => (dueIds.has(todo.id) ? { ...todo, notifiedAt: now } : todo))
+  );
+
+  const labels = text();
+  const first = due[0];
+  const when = describeRemindAt(first.remindAt, now, getSettings().language);
+  const message =
+    due.length > 1
+      ? labels.bubble.todoReminderMore(first.title, when, due.length - 1)
+      : labels.bubble.todoReminder(first.title, when);
+
+  showBubble({ id: `todo-${first.id}`, message, autoDismissMs: 9000 });
+  showSystemNotification(message);
+}
+
+function scheduleTodoCheck(): void {
+  if (todoTimer) {
+    clearInterval(todoTimer);
+    todoTimer = null;
+  }
+  if (!getSettings().todoReminderEnabled) return;
+  checkTodoReminders();
+  todoTimer = setInterval(checkTodoReminders, TODO_CHECK_INTERVAL_MS);
 }
 
 /* ------------------------------------------------------------------ *
@@ -2204,6 +2278,69 @@ function registerIpc(): void {
   ipcMain.on("settings:update", (_event, partial: Partial<Settings>) => {
     setSettings({ ...getSettings(), ...partial });
   });
+  ipcMain.handle("todos:list", () => visibleTodos(getTodos(), Date.now()));
+  ipcMain.handle("todos:create", (_event, title: string, remindAt: number) => {
+    const cleanTitle = normalizeTodoTitle(title);
+    if (!cleanTitle) return null;
+    if (!Number.isFinite(remindAt)) return null;
+
+    const todo: TodoItem = {
+      id: createTodoId(),
+      title: cleanTitle,
+      remindAt: Math.round(remindAt),
+      done: false,
+      doneAt: null,
+      createdAt: Date.now(),
+      notifiedAt: null
+    };
+    publishTodos([...getTodos(), todo]);
+    return todo;
+  });
+  ipcMain.handle(
+    "todos:update",
+    (_event, id: string, patch: { title?: string; remindAt?: number }) => {
+      const todos = getTodos();
+      const current = todos.find((todo) => todo.id === id);
+      if (!current) return null;
+
+      const nextTitle =
+        typeof patch?.title === "string" ? normalizeTodoTitle(patch.title) : current.title;
+      if (!nextTitle) return null;
+      const nextRemindAt =
+        typeof patch?.remindAt === "number" && Number.isFinite(patch.remindAt)
+          ? Math.round(patch.remindAt)
+          : current.remindAt;
+
+      // 改了内容或时间就当作重新提醒一次
+      const changed = nextTitle !== current.title || nextRemindAt !== current.remindAt;
+      const updated: TodoItem = {
+        ...current,
+        title: nextTitle,
+        remindAt: nextRemindAt,
+        notifiedAt: changed ? null : current.notifiedAt
+      };
+      publishTodos(todos.map((todo) => (todo.id === id ? updated : todo)));
+      return updated;
+    }
+  );
+  ipcMain.handle("todos:toggle", (_event, id: string, done: boolean) => {
+    const todos = getTodos();
+    const current = todos.find((todo) => todo.id === id);
+    if (!current) return null;
+
+    const updated: TodoItem = {
+      ...current,
+      done: Boolean(done),
+      doneAt: done ? Date.now() : null,
+      notifiedAt: done ? current.notifiedAt : null
+    };
+    publishTodos(todos.map((todo) => (todo.id === id ? updated : todo)));
+    return updated;
+  });
+  ipcMain.handle("todos:remove", (_event, id: string) => {
+    publishTodos(getTodos().filter((todo) => todo.id !== id));
+    return true;
+  });
   ipcMain.on("demo:trigger", (_event, trigger: DemoTrigger) => triggerDemo(trigger));
   ipcMain.on("focus:start", startFocusMode);
   ipcMain.on("focus:stop", () => stopFocusMode(false));
@@ -2338,6 +2475,7 @@ app.whenReady().then(() => {
   scheduleDistractionDetection();
   configureFullscreenDetection();
   scheduleWorkBuddyBridge();
+  scheduleTodoCheck();
   void refreshWorkBuddyIntegration();
   // 启动 8 秒后再查积分，避开开机那堆提醒；之后每 30 分钟看一眼
   setTimeout(() => checkCreditAlerts(), 8000);

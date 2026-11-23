@@ -37,6 +37,7 @@ export function normalizeSettings(stored: Partial<Settings> = {}): Settings {
     ),
     workBuddyEnabled: stored.workBuddyEnabled !== false,
     workBuddyNotifyEnabled: stored.workBuddyNotifyEnabled !== false,
+    todoReminderEnabled: stored.todoReminderEnabled !== false,
     creditAlerts: normalizeCreditAlerts(stored.creditAlerts)
   };
 }

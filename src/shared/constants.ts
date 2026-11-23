@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   breakIntervalMinutes: 45,
   breakRunDurationSeconds: 60,
   hydrationReminderEnabled: true,
+  todoReminderEnabled: true,
   hydrationIntervalMinutes: 90,
   focusDurationMinutes: 25,
   distractionDetectionEnabled: false,

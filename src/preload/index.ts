@@ -14,6 +14,7 @@ import type {
   WbSwitchSnapshot,
   WorkBuddyLinkStatus
 } from "../shared/types";
+import type { TodoItem } from "../shared/todos";
 
 type Unsubscribe = () => void;
 
@@ -76,6 +77,18 @@ const api = {
     ipcRenderer.invoke("qoder:link-clear"),
   syncWbSwitch: (): Promise<WbSwitchSnapshot> => ipcRenderer.invoke("wbswitch:sync"),
   redetectAgents: (): Promise<AgentIntegration[]> => ipcRenderer.invoke("agents:redetect"),
+  listTodos: (): Promise<TodoItem[]> => ipcRenderer.invoke("todos:list"),
+  createTodo: (title: string, remindAt: number): Promise<TodoItem | null> =>
+    ipcRenderer.invoke("todos:create", title, remindAt),
+  updateTodo: (
+    id: string,
+    patch: { title?: string; remindAt?: number }
+  ): Promise<TodoItem | null> => ipcRenderer.invoke("todos:update", id, patch),
+  toggleTodo: (id: string, done: boolean): Promise<TodoItem | null> =>
+    ipcRenderer.invoke("todos:toggle", id, done),
+  removeTodo: (id: string): Promise<boolean> => ipcRenderer.invoke("todos:remove", id),
+  onTodosChanged: (callback: (todos: TodoItem[]) => void): Unsubscribe =>
+    onChannel("todos:changed", callback),
   getWbSwitchStatus: (): Promise<WbSwitchSnapshot | null> =>
     ipcRenderer.invoke("wbswitch:status"),
   writeClipboard: (text: string): Promise<boolean> => ipcRenderer.invoke("clipboard:write", text),

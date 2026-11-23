@@ -130,6 +130,8 @@ export type Settings = {
   breakIntervalMinutes: number;
   breakRunDurationSeconds: number;
   hydrationReminderEnabled: boolean;
+  /** 待办到点提醒 */
+  todoReminderEnabled: boolean;
   hydrationIntervalMinutes: number;
   focusDurationMinutes: number;
   distractionDetectionEnabled: boolean;

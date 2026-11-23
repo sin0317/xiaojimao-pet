@@ -28,6 +28,7 @@ import type {
   WorkBuddyLinkStatus
 } from "../../../shared/types";
 import { getPetAsset } from "../assets";
+import { TodoSection } from "./TodoSection";
 import { distractionHelp, formatDistractionState, formatTimer, formatTimestamp, localeFor } from "../format";
 import { useNow, useSnapshot } from "../hooks";
 
@@ -1062,6 +1063,11 @@ export function SettingsView(): JSX.Element {
           }
         />
       </section>
+
+      <TodoSection
+        settings={draft}
+        onToggleReminder={(todoReminderEnabled) => updateDraft({ todoReminderEnabled })}
+      />
 
       <section className="prefs__group">
         <h2 className="prefs__group-title">{labels.workClock}</h2>
