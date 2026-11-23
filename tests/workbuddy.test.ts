@@ -88,6 +88,19 @@ export const tests = [
     }
   },
   {
+    name: "登录 / 切号通知不改变任务状态，但会清掉残留的等选",
+    run(): void {
+      const sessions = sessionsOf([
+        event("UserPromptSubmit", { prompt: "改配色" }, T0),
+        event("Notification", { notification_type: "permission_request" }, T0 + 1000),
+        event("Notification", { notification_type: "auth_success" }, T0 + 2000)
+      ]);
+
+      assert.equal(sessions.s1.needsInputAt, null, "切号后不该还挂着等你选");
+      assert.equal(sessions.s1.phase, "running", "也不要把任务判成完成或空闲");
+    }
+  },
+  {
     name: "工具一跑就清掉等选状态（选完之后不应该还挂着）",
     run(): void {
       const sessions = sessionsOf([

@@ -167,7 +167,7 @@ export function isQuestionTool(toolName: unknown): boolean {
  * 返回 true = 明确要人；false = 明确不要（比如任务开始的提示音）；null = 看不出来。
  */
 export function notificationNeedsInput(payload: WorkBuddyHookPayload): boolean | null {
-  const type = asText(payload.notification_type) || asText(payload.type);
+  const type = notificationType(payload);
   if (type) {
     return /permission|approval|attention|needs?.?input|elicitation|question/i.test(type);
   }
@@ -175,6 +175,15 @@ export function notificationNeedsInput(payload: WorkBuddyHookPayload): boolean |
     asText(payload.message) || asText(payload.notification) || asText(payload.text) || asText(payload.reason);
   if (message) return NEEDS_INPUT_PATTERN.test(message);
   return null;
+}
+
+export function notificationType(payload: WorkBuddyHookPayload): string {
+  return asText(payload.notification_type) || asText(payload.type);
+}
+
+/** 登录 / 切换账号成功这类系统通知，跟任务状态无关 */
+export function isAuthNotification(payload: WorkBuddyHookPayload): boolean {
+  return /auth|login|signin|sign_in|account/i.test(notificationType(payload));
 }
 
 export function isWorkBuddyPhase(value: unknown): value is WorkBuddyPhase {
@@ -243,6 +252,21 @@ export function applyWorkBuddyEvents(
     }
 
     if (name === "Notification") {
+      // 登录 / 切换账号：跟任务无关，但顺手把可能残留的「等你选」清掉
+      // （切号会让上一轮会话直接作废，不清理的话徽标会一直挂着）
+      if (isAuthNotification(payload)) {
+        if (base.needsInputAt !== null) {
+          next[id] = {
+            ...base,
+            agent: mergedAgent,
+            project: mergedProject,
+            needsInputAt: null,
+            updatedAt: at
+          };
+        }
+        continue;
+      }
+
       const explicit = notificationNeedsInput(payload);
       // 明确不是求助的通知（任务开始/结束的提示音）直接忽略
       if (explicit === false) continue;
