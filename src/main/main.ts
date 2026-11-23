@@ -1363,7 +1363,24 @@ function checkTodoReminders(): void {
       ? labels.bubble.todoReminderMore(first.title, when, due.length - 1)
       : labels.bubble.todoReminder(first.title, when);
 
-  showBubble({ id: `todo-${first.id}`, message, autoDismissMs: 9000 });
+  // 桌宠可能被最小化到后台或被别的窗口盖住：提醒时先确保能看到它
+  if (petWindow && !petWindow.isDestroyed()) {
+    if (!petWindow.isVisible()) petWindow.showInactive();
+    petWindow.moveTop();
+  }
+
+  void appendFile(
+    join(homedir(), ".xiaojimao", "todo-debug.log"),
+    `${new Date(now).toISOString()} fire "${first.title}" visible=${petWindow?.isVisible() ?? false} bounds=${JSON.stringify(petWindow?.getBounds() ?? null)}\n`
+  ).catch(() => undefined);
+
+  showBubble({
+    id: `todo-${first.id}`,
+    message,
+    // 待办不能一闪而过：留一分钟，或者用户点「知道了」再收
+    actions: [{ id: "todo-ack", label: labels.bubble.todoAck, kind: "primary" }],
+    autoDismissMs: 60_000
+  });
   showSystemNotification(message);
 }
 
@@ -2151,7 +2168,13 @@ async function journalHookEvent(
   if (changed) applyWorkBuddyStatus(summarizeWorkBuddy(workBuddySessions, now));
 }
 
-function handleBubbleAction(actionId: string): void {  if (actionId.startsWith("approval:")) {
+function handleBubbleAction(actionId: string): void {
+  // 待办提醒的「知道了」：直接收起气泡，状态早在提醒时就记过了
+  if (actionId === "todo-ack") {
+    hideBubble();
+    return;
+  }
+  if (actionId.startsWith("approval:")) {
     const [, decision, id] = actionId.split(":");
     const approval = activeApproval;
     if (approval && approval.id === id && (decision === "allow" || decision === "deny")) {
@@ -2434,6 +2457,11 @@ function registerIpc(): void {
 protocol.registerSchemesAsPrivileged([
   { scheme: "pawpal-asset", privileges: { bypassCSP: true, supportFetchAPI: true } }
 ]);
+
+// Windows 上不发这一句，Notification 会被系统静默丢掉（尤其是解包版没走安装器时）
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.xiaojimao.pet");
+}
 
 app.whenReady().then(() => {
 

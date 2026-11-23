@@ -128,6 +128,7 @@ export const I18N = {
       ],
       approvalTitle: (agent: string, tool: string) => `${agent} 想执行 ${tool}`,
       approvalAllowed: "已允许，放行～",
+      todoAck: "知道了",
       approvalDenied: "已拒绝，拦下了",
       creditExpiring: (agent: string, days: number, balance: number | null) => {
         const when = days <= 0 ? "今天" : `${days} 天后`;
@@ -563,6 +564,7 @@ export const I18N = {
       ],
       approvalTitle: (agent: string, tool: string) => `${agent} wants to run ${tool}`,
       approvalAllowed: "Allowed — go ahead",
+      todoAck: "Got it",
       approvalDenied: "Denied — blocked",
       creditExpiring: (agent: string, days: number, balance: number | null) => {
         const when = days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
