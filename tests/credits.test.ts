@@ -7,10 +7,14 @@ import {
   parseQoderUsage,
   parseResourceSummary,
   creditReminderKey,
+  CREDIT_AGENTS,
+  CREDIT_AGENT_LABELS,
+  CREDIT_CAPTURE_AGENTS,
   defaultCreditAlert,
   isCreditDueSoon,
   resolveExpiryMs
 } from "../src/shared/credits";
+import { normalizeCreditAlerts } from "../src/main/settingsStore";
 
 const TODAY = new Date(2026, 10, 22, 10, 30); // 2026-11-22
 
@@ -208,6 +212,28 @@ export const tests = [
     run(): void {
       assert.equal(parseQoderUsage({}), null);
       assert.equal(parseQoderUsage(null), null);
+    }
+  },
+  {
+    name: "credits: 国际版 Qoder 与 Qoder CN 是两条独立记录",
+    run(): void {
+      assert.deepEqual(CREDIT_AGENTS, ["workbuddy", "qoder", "qoderCn", "trae"]);
+      assert.equal(CREDIT_AGENT_LABELS.qoder, "Qoder");
+      assert.equal(CREDIT_AGENT_LABELS.qoderCn, "Qoder CN");
+      // 只有这两家有扫码抓取
+      assert.deepEqual(CREDIT_CAPTURE_AGENTS, ["workbuddy", "qoderCn"]);
+
+      const alerts = normalizeCreditAlerts([
+        { agentId: "qoder", balance: 111, expiresOn: "2026-12-01", remindDays: 3 },
+        { agentId: "qoderCn", balance: 222, expiresOn: "2026-12-12", remindDays: 5 }
+      ]);
+      assert.equal(alerts.length, 4);
+      const intl = alerts.find((item) => item.agentId === "qoder");
+      const cn = alerts.find((item) => item.agentId === "qoderCn");
+      assert.equal(intl?.balance, 111);
+      assert.equal(cn?.balance, 222);
+      assert.equal(cn?.remindDays, 5);
+      assert.equal(defaultCreditAlert("qoderCn").amountIsExact, true);
     }
   }
 ];

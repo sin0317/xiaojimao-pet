@@ -5,15 +5,25 @@
  * 读不到余额。所以这里只算「用户自己填的数字还剩几天」——不做任何联网请求。
  */
 
-export type CreditAgentId = "workbuddy" | "qoder" | "trae";
+export type CreditAgentId = "workbuddy" | "qoder" | "qoderCn" | "trae";
 
-export const CREDIT_AGENTS: CreditAgentId[] = ["workbuddy", "qoder", "trae"];
+/**
+ * 顺序即界面顺序。
+ * 注意：`qoder` 是国际版（qoder.ai），`qoderCn` 是国内版（qoder.cn）。
+ * 自动抓取（设备授权 + usage 接口）目前只接了国内版 `qoderCn`；
+ * 国际版只能手填——没有对应的开放接口，别硬猜。
+ */
+export const CREDIT_AGENTS: CreditAgentId[] = ["workbuddy", "qoder", "qoderCn", "trae"];
 
 export const CREDIT_AGENT_LABELS: Record<CreditAgentId, string> = {
   workbuddy: "WorkBuddy",
   qoder: "Qoder",
+  qoderCn: "Qoder CN",
   trae: "Trae"
 };
+
+/** 能扫码自动抓余额的那几家 */
+export const CREDIT_CAPTURE_AGENTS: CreditAgentId[] = ["workbuddy", "qoderCn"];
 
 export type CreditAlert = {
   agentId: CreditAgentId;

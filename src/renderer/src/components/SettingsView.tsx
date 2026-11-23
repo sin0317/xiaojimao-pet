@@ -660,7 +660,7 @@ export function SettingsView(): JSX.Element {
   const [agentDiag, setAgentDiag] = useState<Diagnostics | null>(null);
   const [diagCopied, setDiagCopied] = useState(false);
   const [linkStatuses, setLinkStatuses] = useState<Record<CreditAgentId, WorkBuddyLinkStatus | null>>(
-    { workbuddy: null, qoder: null, trae: null }
+    { workbuddy: null, qoder: null, qoderCn: null, trae: null }
   );
   const [wbSwitch, setWbSwitch] = useState<WbSwitchSnapshot | null>(null);
   /** 刚移除接入的 agent：提示要重启对应客户端才会彻底停下 */
@@ -700,7 +700,7 @@ export function SettingsView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    const waiting = (["workbuddy", "qoder"] as const).filter(
+    const waiting = (["workbuddy", "qoderCn"] as const).filter(
       (agent) => linkStatuses[agent]?.state === "waiting"
     );
     if (!waiting.length) return;
@@ -717,13 +717,13 @@ export function SettingsView(): JSX.Element {
       }
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [linkStatuses.workbuddy?.state, linkStatuses.qoder?.state]);
+  }, [linkStatuses.workbuddy?.state, linkStatuses.qoderCn?.state]);
 
   async function startCreditLink(agent: CreditAgentId): Promise<void> {
     const call =
       agent === "workbuddy"
         ? window.pawpal.startWorkBuddyLink()
-        : agent === "qoder"
+        : agent === "qoderCn"
           ? window.pawpal.startQoderLink()
           : null;
     if (!call) return;
@@ -1401,7 +1401,7 @@ export function SettingsView(): JSX.Element {
                 })
               }
             />
-            {alert.agentId === "workbuddy" || alert.agentId === "qoder" ? (
+            {alert.agentId === "workbuddy" || alert.agentId === "qoderCn" ? (
               <LinkRow
                 status={linkStatuses[alert.agentId] ?? null}
                 labels={labels}

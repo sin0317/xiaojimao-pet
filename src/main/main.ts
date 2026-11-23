@@ -28,6 +28,7 @@ import {
   CREDIT_AGENT_LABELS,
   creditDaysLeft,
   creditReminderKey,
+  defaultCreditAlert,
   toDateInputValue
 } from "../shared/credits";
 import { syncWbSwitchAccounts, type WbSwitchAccount } from "./wbSwitch";
@@ -164,7 +165,16 @@ type StoreSchema = {
     expiresAt: number | null;
     updatedAt: number;
   };
-  /** Qoder 设备授权的凭证与机器标识 */
+  /** Qoder CN（qoder.cn）设备授权的凭证与机器标识 */
+  qoderCnLink?: {
+    tokenCipher: string;
+    refreshCipher: string | null;
+    uid: string | null;
+    name: string | null;
+    expiresAt: number | null;
+    updatedAt: number;
+  };
+  /** 旧版本把 CN 的凭证存在这个键上，启动时迁移到 qoderCnLink */
   qoderLink?: {
     tokenCipher: string;
     refreshCipher: string | null;
@@ -419,13 +429,40 @@ let qoderStatus: WorkBuddyLinkStatus = {
 };
 let qoderAborted = false;
 
+/**
+ * 老版本只有一个「Qoder」入口，而它实际走的是 qoder.cn（国内版）的接口。
+ * 现在拆成 Qoder（国际版，手填）+ Qoder CN（可扫码抓取），把旧数据搬到 CN。
+ */
+function migrateLegacyQoderLink(): void {
+  const legacy = store.get("qoderLink");
+  if (!legacy) return;
+
+  if (!store.get("qoderCnLink")) store.set("qoderCnLink", legacy);
+  store.delete("qoderLink");
+
+  const settings = getSettings();
+  const alerts = normalizeCreditAlerts(settings.creditAlerts);
+  const legacyRow = alerts.find((item) => item.agentId === "qoder");
+  // 自动抓来的数值本来就属于国内版；手填的可能是国际版，别乱搬
+  if (!legacyRow || legacyRow.amountIsExact) return;
+
+  setSettings({
+    ...settings,
+    creditAlerts: alerts.map((item) => {
+      if (item.agentId === "qoderCn") return { ...legacyRow, agentId: "qoderCn" };
+      if (item.agentId === "qoder") return defaultCreditAlert("qoder");
+      return item;
+    })
+  });
+}
+
 function setQoderStatus(next: Partial<WorkBuddyLinkStatus>): void {
   qoderStatus = { ...qoderStatus, ...next };
   sendToAll("qoder:link-status", qoderStatus);
 }
 
 async function refreshQoderCredits(): Promise<void> {
-  const link = store.get("qoderLink");
+  const link = store.get("qoderCnLink");
   if (!link) return;
   const labels = text().settings;
 
@@ -443,7 +480,7 @@ async function refreshQoderCredits(): Promise<void> {
   try {
     const credits = await fetchQoderCredits(token);
     if (!credits) throw new Error(labels.creditLinkEmpty);
-    applyCreditsToSettings("qoder", credits);
+    applyCreditsToSettings("qoderCn", credits);
     setQoderStatus({
       state: "success",
       message: "",
@@ -491,7 +528,7 @@ async function startQoderLink(): Promise<{ ok: boolean; message?: string }> {
           return;
         }
 
-        store.set("qoderLink", {
+        store.set("qoderCnLink", {
           tokenCipher,
           refreshCipher: account.refreshToken ? sealToken(account.refreshToken) : null,
           uid: account.uid,
@@ -1343,8 +1380,7 @@ function normalizeTodoTitle(input: unknown): string {
     .slice(0, 120);
 }
 
-/** 每 30 秒扫一次：到点、没提醒过、没完成的，弹一次气泡 + 系统通知 */
-function checkTodoReminders(): void {
+/** 每 30 秒扫一次：到点、没提醒过、没完成的，弹一次气泡 + 系统通知 */function checkTodoReminders(): void {
   const now = Date.now();
   const todos = getTodos();
   const due = dueTodos(todos, now);
@@ -2409,7 +2445,7 @@ function registerIpc(): void {
     return qoderStatus;
   });
   ipcMain.handle("qoder:link-clear", () => {
-    store.delete("qoderLink");
+    store.delete("qoderCnLink");
     qoderAborted = true;
     qoderStatus = {
       state: "idle",
@@ -2520,7 +2556,8 @@ app.whenReady().then(() => {
     setTimeout(() => void refreshWorkBuddyCredits(), 10_000);
   }
 
-  const savedQoder = store.get("qoderLink");
+  migrateLegacyQoderLink();
+  const savedQoder = store.get("qoderCnLink");
   if (savedQoder) {
     qoderStatus = {
       ...qoderStatus,
