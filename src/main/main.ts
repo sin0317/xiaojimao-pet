@@ -2328,6 +2328,8 @@ app.whenReady().then(() => {
   });
 
   getStats();
+  // 每次启动按当前 exe 重写一次自启项：程序目录搬过家时，注册表里的旧路径会被自动修正
+  applyLaunchAtLoginPreference(getSettings().launchAtLoginEnabled);
   registerIpc();
   createPetWindow();
   createTray();

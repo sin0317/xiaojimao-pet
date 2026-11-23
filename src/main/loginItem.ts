@@ -8,7 +8,10 @@ export function applyLaunchAtLoginPreference(enabled: boolean): void {
   if (!supportsLoginItemSettings()) return;
   app.setLoginItemSettings({
     openAtLogin: enabled,
-    openAsHidden: true
+    openAsHidden: true,
+    // 显式给出当前 exe：程序目录搬过家之后，注册表里的旧路径会被这条覆盖掉
+    path: process.execPath,
+    args: []
   });
 }
 
