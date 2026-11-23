@@ -87,6 +87,8 @@ const TARGET_EVENTS: Record<AgentHookTarget, EventSpec[]> = {
     { event: "PermissionRequest", matcher: "", timeout: 40, script: "approval" }
   ],
   trae: [
+    // Trae 的钩子默认不执行，必须在「设置 > Hooks」里启用，且运行方式要选「本地自动运行」
+    { event: "SessionStart", matcher: "", timeout: 10 },
     { event: "UserPromptSubmit", matcher: "", timeout: 10 },
     { event: "PreToolUse", matcher: "AskUserQuestion|ExitPlanMode", timeout: 10 },
     // Trae 的 Notification matcher 匹配 notification_type，空/星号表示全部

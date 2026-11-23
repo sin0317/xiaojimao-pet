@@ -76,6 +76,7 @@ export const tests = [
       assert.deepEqual(Object.keys(merged.hooks).sort(), [
         "Notification",
         "PreToolUse",
+        "SessionStart",
         "Stop",
         "UserPromptSubmit"
       ]);
