@@ -2499,6 +2499,20 @@ if (process.platform === "win32") {
   app.setAppUserModelId("com.xiaojimao.pet");
 }
 
+/**
+ * 只允许跑一个实例。
+ * 起因：设了 AppUserModelId 之后，Electron 的自启注册表项名会变成 com.xiaojimao.pet，
+ * 而旧版留下的 electron.app.小鸡毛桌宠 还在——开机时两条一起拉起，桌宠就出现两只。
+ * 有了这把锁，无论被几路拉起，第二个进程直接退，并让已经跑着的那只露个脸。
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    ensurePetWindowVisible();
+  });
+}
+
 app.whenReady().then(() => {
 
   protocol.handle("pawpal-asset", (request) => {

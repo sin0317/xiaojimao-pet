@@ -2,6 +2,15 @@
 
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.10.5 — 2026-11-24
+
+### 修复
+
+- **开机出现两只桌宠**：设了 `AppUserModelId` 之后，Electron 的自启注册表项名从 `electron.app.小鸡毛桌宠`
+  变成了 `com.xiaojimao.pet`，旧项没被清掉，登录时两条一起拉起
+  - 补 `app.requestSingleInstanceLock()`：无论被几路拉起，第二个进程直接退出，并让已在跑的那只露个脸
+  - 已手动删除残留的 `electron.app.小鸡毛桌宠` 项
+
 ## 1.10.4 — 2026-11-23
 
 ### 改进
