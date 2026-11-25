@@ -15,3 +15,7 @@ docs/release.md
 .asar-stage-*/
 out-pkg-*/
 build-win/
+
+# 环境变量与密钥
+.env
+.env.*
