@@ -186,6 +186,14 @@ export function isAuthNotification(payload: WorkBuddyHookPayload): boolean {
   return /auth|login|signin|sign_in|account/i.test(notificationType(payload));
 }
 
+/**
+ * 「闲下来了」的通知：Trae / WorkBuddy 任务收尾时都会发 idle_prompt。
+ * 对桌宠来说这就是任务结束——比 Stop 更稳，因为它连「被用户掐断」的情况也跟着发。
+ */
+export function isIdleNotification(payload: WorkBuddyHookPayload): boolean {
+  return /idle/i.test(notificationType(payload));
+}
+
 export function isWorkBuddyPhase(value: unknown): value is WorkBuddyPhase {
   return value === "running" || value === "needsInput" || value === "done";
 }
@@ -223,7 +231,18 @@ export function applyWorkBuddyEvents(
       continue;
     }
     // SessionStart 只说明会话被打开（含恢复历史会话），不作为任务状态依据
-    if (name === "SessionStart") continue;
+    if (name === "SessionStart") {
+      // 例外：Trae 每开一个任务就新建会话，旧会话被切走后不会再收到 Stop / idle，
+      // 会一直以「任务中」挂着（最长 3 小时）。新会话一开，就把同 agent 的旧会话判成结束。
+      if (agent === "Trae") {
+        for (const [otherId, other] of Object.entries(next)) {
+          if (otherId === id || other.agent !== "Trae") continue;
+          if (other.phase === "done" && other.needsInputAt === null) continue;
+          next[otherId] = { ...other, phase: "done", needsInputAt: null, updatedAt: at };
+        }
+      }
+      continue;
+    }
 
     const base: WorkBuddySession = next[id] ?? {
       id,
@@ -268,6 +287,21 @@ export function applyWorkBuddyEvents(
       }
 
       const explicit = notificationNeedsInput(payload);
+
+      // 「闲下来了」= 任务结束：Trae 的 Stop 有时不发（用户掐断任务时），
+      // 但 idle_prompt 一定会来，用它兜底比等 Stop 靠谱。
+      // 注意：正在「等你选」的会话不能被它判定成结束——问题还摆在那儿呢。
+      if (isIdleNotification(payload) && base.needsInputAt === null) {
+        next[id] = {
+          ...base,
+          agent: mergedAgent,
+          project: mergedProject,
+          phase: "done",
+          needsInputAt: null,
+          updatedAt: at
+        };
+        continue;
+      }
       // 明确不是求助的通知（任务开始/结束的提示音）直接忽略
       if (explicit === false) continue;
       // 看不出类型时，只接受任务已经跑了一会儿之后的通知，

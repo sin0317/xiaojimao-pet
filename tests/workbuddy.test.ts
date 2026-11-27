@@ -101,6 +101,49 @@ export const tests = [
     }
   },
   {
+    name: "idle_prompt 当作任务结束（Trae 掐断任务时不一定有 Stop）",
+    run(): void {
+      const sessions = sessionsOf([
+        event("UserPromptSubmit", { prompt: "重构一下", agent: "Trae" }, T0),
+        event("Notification", { notification_type: "idle_prompt", agent: "Trae" }, T0 + 5000)
+      ]);
+
+      assert.equal(sessions.s1.phase, "done");
+      assert.equal(sessions.s1.needsInputAt, null);
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 6000).phase, "done");
+    }
+  },
+  {
+    name: "idle_prompt 不会盖掉「等你选」",
+    run(): void {
+      const sessions = sessionsOf([
+        event("UserPromptSubmit", { prompt: "跑个命令" }, T0),
+        event("Notification", { notification_type: "permission_prompt" }, T0 + 1000),
+        event("Notification", { notification_type: "idle_prompt" }, T0 + 2000)
+      ]);
+
+      assert.notEqual(sessions.s1.needsInputAt, null, "问题还摆着，不能判成结束");
+      assert.equal(summarizeWorkBuddy(sessions, T0 + 3000).phase, "needsInput");
+    }
+  },
+  {
+    name: "Trae 开新会话时，上一个没收到 Stop 的会话不再算任务中",
+    run(): void {
+      const sessions = applyWorkBuddyEvents({}, [
+        event("SessionStart", { session_id: "old", agent: "Trae" }, T0),
+        event("UserPromptSubmit", { session_id: "old", prompt: "旧任务", agent: "Trae" }, T0 + 1000),
+        event("SessionStart", { session_id: "new", agent: "Trae" }, T0 + 5000)
+      ]);
+
+      assert.equal(sessions.old.phase, "done", "被切走的会话要判成结束");
+      assert.equal(
+        summarizeWorkBuddy(sessions, T0 + 6000).phase,
+        "done",
+        "不该再显示任务中（显示已完成是合理的）"
+      );
+    }
+  },
+  {
     name: "工具一跑就清掉等选状态（选完之后不应该还挂着）",
     run(): void {
       const sessions = sessionsOf([
